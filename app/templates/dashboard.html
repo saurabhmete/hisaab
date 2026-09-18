@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="month-nav" style="justify-content: space-between; width: 100%">
+  <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap">
+    {% if current %}
+    <h1>{{ month_names[current.row.month - 1] }} {{ current.row.year }}</h1>
+    <a class="btn secondary" href="/month/{{ current.row.year }}/{{ current.row.month }}">Edit</a>
+    {% else %}
+    <h1>Dashboard</h1>
+    {% endif %}
+  </div>
+  <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap">
+    <a class="btn" href="/month/{{ next_y }}/{{ next_m }}">+ Add {{ month_names[next_m - 1] }} {{ next_y }}</a>
+    <form class="inline" method="get" action="/goto" style="gap:0.3rem">
+      <select name="month" aria-label="Month">
+        {% for name in month_names %}
+        <option value="{{ loop.index }}" {% if loop.index == sel_month %}selected{% endif %}>{{ name[:3] }}</option>
+        {% endfor %}
+      </select>
+      <select name="year" aria-label="Year">
+        {% for y in years %}<option {% if y == sel_year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+        {% if (years | last | default(0)) < next_y %}<option>{{ next_y }}</option>{% endif %}
+      </select>
+      <button type="submit" class="secondary">Open</button>
+    </form>
+  </div>
+</div>
+
+{% if current %}
+{% set r = current.row %}
+
+<div class="cards">
+  <div class="card"><div class="label">Salary</div><div class="value">{{ r.salary | eur }}</div></div>
+  <div class="card"><div class="label">Expenses</div><div class="value">{{ current.total_expense | eur }}</div></div>
+  <div class="card"><div class="label">After expenses</div>
+    <div class="value {{ 'pos' if current.after_expense >= 0 else 'neg' }}">{{ current.after_expense | eur }}</div></div>
+  <div class="card"><div class="label">Invested</div><div class="value">{{ r.invested | eur }}</div></div>
+  <div class="card"><div class="label">Left after investing</div>
+    <div class="value {{ 'pos' if current.after_invest >= 0 else 'neg' }}">{{ current.after_invest | eur }}</div></div>
+</div>
+
+{% if current.expenses %}
+<div class="panel">
+  <h2 style="margin-top:0">Expense breakdown</h2>
+  <div class="table-scroll"><table>
+    <thead><tr><th>Category</th><th>Amount</th><th>Share</th></tr></thead>
+    <tbody>
+    {% for e in current.expenses %}
+      <tr><td>{{ e.category }}</td><td>{{ e.amount | eur }}</td>
+        <td class="muted">{{ '%.0f' % (e.amount / current.total_expense * 100 if current.total_expense else 0) }}%</td></tr>
+    {% endfor %}
+    <tr class="total"><td>Total</td><td>{{ current.total_expense | eur }}</td><td></td></tr>
+    </tbody>
+  </table></div>
+</div>
+{% endif %}
+{% else %}
+<div class="notice">
+  No data yet. <a href="/month/{{ today.year }}/{{ today.month }}">Add this month</a>
+  or <a href="/import">import your Excel sheet</a> to get started.
+</div>
+{% endif %}
+
+<div class="panel">
+  <h2 style="margin-top:0">Salary vs expenses &middot; {{ sel_year }}</h2>
+  <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0">Investment net worth (INR)</h2>
+  <div class="chart-wrap"><canvas id="networthChart"></canvas></div>
+</div>
+
+<script src="/static/chart.umd.js"></script>
+<script>
+const trend = {{ trend_json | safe }};
+const networth = {{ networth_json | safe }};
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+Chart.defaults.color = css('--muted');
+Chart.defaults.borderColor = css('--grid');
+
+if (trend.length) {
+  new Chart(document.getElementById('trendChart'), {
+    type: 'bar',
+    data: {
+      labels: trend.map(t => t.label),
+      datasets: [
+        { label: 'Salary', data: trend.map(t => t.salary), backgroundColor: css('--accent'),
+          borderRadius: 4, maxBarThickness: 26 },
+        { label: 'Expenses', data: trend.map(t => t.expense), backgroundColor: css('--accent-2'),
+          borderRadius: 4, maxBarThickness: 26 },
+        { label: 'Invested', data: trend.map(t => t.invested), backgroundColor: css('--accent-3'),
+          borderRadius: 4, maxBarThickness: 26 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top', labels: { boxWidth: 12, boxHeight: 12 } },
+        tooltip: { callbacks: { label: c => ` ${c.dataset.label}: €${c.parsed.y.toLocaleString()}` } },
+      },
+      scales: {
+        y: { beginAtZero: true, ticks: { callback: v => '€' + v.toLocaleString() } },
+        x: { grid: { display: false } },
+      },
+    },
+  });
+} else {
+  document.getElementById('trendChart').closest('.panel').style.display = 'none';
+}
+
+if (networth.length) {
+  new Chart(document.getElementById('networthChart'), {
+    type: 'line',
+    data: {
+      labels: networth.map(n => n.label),
+      datasets: [{
+        label: 'Net worth',
+        data: networth.map(n => n.value),
+        borderColor: css('--accent'), backgroundColor: css('--accent'),
+        borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, tension: 0.25,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: {
+          label: c => ` Net worth: ₹${c.parsed.y.toLocaleString()}`,
+          afterLabel: c => `Profit: ₹${networth[c.dataIndex].profit.toLocaleString()}`,
+        } },
+      },
+      scales: {
+        y: { ticks: { callback: v => '₹' + (v / 100000).toFixed(1) + 'L' } },
+        x: { grid: { display: false } },
+      },
+    },
+  });
+} else {
+  document.getElementById('networthChart').closest('.panel').style.display = 'none';
+}
+</script>
+{% endblock %}

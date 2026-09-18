@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Hisaab{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>&#128181;</text></svg>">
+</head>
+<body>
+<nav class="topnav">
+  <a class="brand" href="/">&#128181; Hisaab</a>
+  <div class="links">
+    <a href="/" {% if request.url.path == '/' %}class="active"{% endif %}>Dashboard</a>
+    <a href="/years" {% if request.url.path == '/years' or request.url.path.startswith('/year/') %}class="active"{% endif %}>Years</a>
+    <a href="/investments" {% if request.url.path == '/investments' %}class="active"{% endif %}>Investments</a>
+    <a href="/import" {% if request.url.path == '/import' %}class="active"{% endif %}>Import</a>
+    {% if user and user.is_admin %}
+    <a href="/users" {% if request.url.path == '/users' %}class="active"{% endif %}>Users</a>
+    {% endif %}
+  </div>
+  {% if user %}
+  <div class="usermenu">
+    <span>{{ user.username }}</span>
+    <form method="post" action="/logout"><button type="submit">Log out</button></form>
+  </div>
+  {% endif %}
+</nav>
+<main>
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Import · Hisaab{% endblock %}
+{% block content %}
+
+<h1>Import from Excel</h1>
+
+{% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+{% if report %}
+<div class="notice">
+  Import complete:
+  <ul style="margin:0.3rem 0 0">
+  {% for sheet, count in report.items() %}
+    <li><strong>{{ sheet }}</strong> — {{ count }} entries</li>
+  {% endfor %}
+  </ul>
+  <p class="small" style="margin-bottom:0"><a href="/">Go to the dashboard</a></p>
+</div>
+{% endif %}
+
+<div class="panel">
+  <form class="inline" method="post" action="/import" enctype="multipart/form-data">
+    <label class="field">Workbook (.xlsx)
+      <input type="file" name="file" accept=".xlsx" required>
+    </label>
+    <button type="submit">Import</button>
+  </form>
+  <p class="small muted" style="margin-bottom:0">
+    Months that already exist are overwritten with the workbook's values. Importing is
+    optional — everything can also be entered directly on the site.
+  </p>
+</div>
+
+<div class="panel format-doc">
+  <h2>Expected workbook format</h2>
+
+  <h2 class="small" style="margin-bottom:0.3rem">1 &middot; Year sheets — one per year, named after the year (e.g. <code>2026</code>)</h2>
+  <ul class="small">
+    <li><strong>Row 1:</strong> <code>Total Salary</code> in column A, then one salary figure per month.</li>
+    <li><strong>Row 2:</strong> <code>Expenses</code> in column A, then month names (<code>January</code>, <code>February</code>, …) — one column per month. If the months wrap past December (…Nov, Dec, Jan), the wrapped months are placed in the next year.</li>
+    <li><strong>Following rows:</strong> one expense category per row — the category name in column A, amounts under each month column. Empty cells are skipped.</li>
+    <li><strong>Optional:</strong> a <code>Can Invest</code> row sets the amount invested that month.</li>
+    <li>Rows named <code>Total Expense</code>, <code>Salary Remaining…</code>, and <code>Remainder…</code> are ignored — the app computes those itself.</li>
+  </ul>
+  <div class="table-scroll"><table>
+    <thead><tr><th>A</th><th>B</th><th>C</th><th>…</th></tr></thead>
+    <tbody>
+      <tr><td>Total Salary</td><td>2808</td><td>2808</td><td>…</td></tr>
+      <tr><td>Expenses</td><td>January</td><td>February</td><td>…</td></tr>
+      <tr><td>Rent</td><td>735</td><td>735</td><td>…</td></tr>
+      <tr><td>Grocery</td><td>250</td><td>250</td><td>…</td></tr>
+      <tr><td>Can Invest</td><td>1100</td><td>1100</td><td>…</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2 class="small" style="margin-bottom:0.3rem">2 &middot; Investment sheet — any sheet with "Investment" in its name</h2>
+  <ul class="small">
+    <li><strong>Row 1:</strong> month names across the columns (these months are assigned to the latest year sheet's year).</li>
+    <li><strong>Labeled rows</strong> (matched by name, in column A):
+      <code>India Investment Value (Rupees)</code>, <code>India Profit (Rupees)</code>,
+      <code>Germany Investment Value (Euros)</code>, <code>Germany Profit (Euros)</code>,
+      and <code>EUR to INR rate</code>.</li>
+    <li>Net worth and profit percentages are recomputed by the app — those rows are ignored.</li>
+  </ul>
+  <div class="table-scroll"><table>
+    <thead><tr><th>A</th><th>B</th><th>C</th><th>…</th></tr></thead>
+    <tbody>
+      <tr><td>Investment</td><td>January</td><td>February</td><td>…</td></tr>
+      <tr><td>India Investment Value (Rupees)</td><td>405901</td><td>416787</td><td>…</td></tr>
+      <tr><td>India Profit (Rupees)</td><td>86511</td><td>78845</td><td>…</td></tr>
+      <tr><td>Germany Investment Value (Euros)</td><td>8765</td><td>9755</td><td>…</td></tr>
+      <tr><td>Germany Profit (Euros)</td><td>345</td><td>349</td><td>…</td></tr>
+      <tr><td>India EUR to INR rate (Rupees)</td><td>110.016</td><td>110.016</td><td>…</td></tr>
+    </tbody>
+  </table></div>
+</div>
+
+{% endblock %}

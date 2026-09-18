@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Set up · Hisaab</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="auth-wrap">
+  <h1>&#128181; Welcome to Hisaab</h1>
+  <p class="muted" style="text-align:center">Create the admin account. Only admins can add or remove users later.</p>
+  {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+  <div class="panel">
+    <form method="post" action="/setup">
+      <label class="field">Username
+        <input name="username" autocomplete="username" autofocus required>
+      </label>
+      <label class="field">Password <span class="muted">(at least 8 characters)</span>
+        <input type="password" name="password" autocomplete="new-password" minlength="8" required>
+      </label>
+      <label class="field">Repeat password
+        <input type="password" name="password2" autocomplete="new-password" minlength="8" required>
+      </label>
+      <button type="submit">Create admin account</button>
+    </form>
+  </div>
+</div>
+</body>
+</html>

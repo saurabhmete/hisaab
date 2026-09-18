@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Years · Hisaab{% endblock %}
+{% block content %}
+
+<h1>Years</h1>
+
+{% if summaries %}
+{% for s in summaries %}
+<a href="/year/{{ s.year }}" style="text-decoration:none; color:inherit; display:block">
+  <div class="panel" style="display:flex; align-items:center; gap:1.5rem; flex-wrap:wrap">
+    <h2 style="margin:0; font-size:1.4rem; letter-spacing:-0.02em">{{ s.year }}</h2>
+    <span class="muted small">{{ s.months }} month{{ 's' if s.months != 1 }}</span>
+    <div style="display:flex; gap:2rem; flex-wrap:wrap; margin-left:auto; font-variant-numeric:tabular-nums">
+      <span><span class="muted small">Salary</span><br><strong>{{ s.salary | eur }}</strong></span>
+      <span><span class="muted small">Expenses</span><br><strong>{{ s.expense | eur }}</strong></span>
+      <span><span class="muted small">Invested</span><br><strong>{{ s.invested | eur }}</strong></span>
+      <span><span class="muted small">Remainder</span><br>
+        <strong class="{{ 'pos' if s.remainder >= 0 else 'neg' }}">{{ s.remainder | eur }}</strong></span>
+    </div>
+  </div>
+</a>
+{% endfor %}
+{% else %}
+<div class="notice">No data yet — <a href="/month/{{ today.year }}/{{ today.month }}">plan your first month</a>
+or <a href="/import">import your Excel sheet</a>.</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ year }} · Hisaab{% endblock %}
+{% block content %}
+
+<h1>{{ year }} overview</h1>
+
+{% if months %}
+<div class="panel">
+  <div class="table-scroll"><table>
+    <thead>
+      <tr>
+        <th></th>
+        {% for m in months %}
+        <th><a href="/month/{{ year }}/{{ m.month }}">{{ month_names[m.month - 1][:3] }}</a></th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Salary</strong></td>
+        {% for m in months %}<td>{{ m.salary | eur }}</td>{% endfor %}
+      </tr>
+      {% for c in categories %}
+      <tr>
+        <td>{{ c }}</td>
+        {% for m in months %}
+        <td>{% if (c, m.month) in grid %}{{ grid[(c, m.month)] | eur }}{% else %}<span class="muted">—</span>{% endif %}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+      <tr class="total">
+        <td>Total expense</td>
+        {% for m in months %}<td>{{ summaries[m.month].total_expense | eur }}</td>{% endfor %}
+      </tr>
+      <tr>
+        <td>After expenses</td>
+        {% for m in months %}
+        {% set v = summaries[m.month].after_expense %}
+        <td class="{{ 'pos' if v >= 0 else 'neg' }}">{{ v | eur }}</td>
+        {% endfor %}
+      </tr>
+      <tr>
+        <td>Invested</td>
+        {% for m in months %}<td>{{ m.invested | eur }}</td>{% endfor %}
+      </tr>
+      <tr>
+        <td>After investing</td>
+        {% for m in months %}
+        {% set v = summaries[m.month].after_invest %}
+        <td class="{{ 'pos' if v >= 0 else 'neg' }}">{{ v | eur }}</td>
+        {% endfor %}
+      </tr>
+    </tbody>
+  </table></div>
+</div>
+{% else %}
+<div class="notice">No months recorded for {{ year }} yet.
+  <a href="/month/{{ year }}/1">Start with January</a>.</div>
+{% endif %}
+
+{% endblock %}

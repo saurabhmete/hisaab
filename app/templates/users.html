@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Users · Hisaab{% endblock %}
+{% block content %}
+
+<h1>Users</h1>
+<p class="muted small">Everyone shares the same household data. Only admins can manage users;
+the last admin can never be deleted.</p>
+
+{% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+
+<div class="panel">
+  <div class="table-scroll"><table>
+    <thead><tr><th>Username</th><th>Role</th><th>Since</th><th></th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr>
+        <td>{{ u.username }}{% if u.id == user.id %} <span class="muted small">(you)</span>{% endif %}</td>
+        <td>{% if u.is_admin %}Admin{% else %}Member{% endif %}</td>
+        <td class="muted small">{{ u.created_at[:10] }}</td>
+        <td style="width:1%">
+          {% if u.id != user.id %}
+          <form method="post" action="/users/{{ u.id }}/delete"
+                onsubmit="return confirm('Remove {{ u.username }}? They will no longer be able to log in.')">
+            <button class="danger" type="submit" title="Remove user">&#10005;</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+
+  <h2>Add a user</h2>
+  <form class="inline" method="post" action="/users">
+    <label class="field">Username
+      <input name="username" autocomplete="off" required>
+    </label>
+    <label class="field">Password <span class="muted">(min 8 chars)</span>
+      <input type="password" name="password" autocomplete="new-password" minlength="8" required>
+    </label>
+    <label class="field" style="flex-direction:row; align-items:center; gap:0.4rem; padding-bottom:0.6rem">
+      <input type="checkbox" name="is_admin" value="1" style="width:auto"> Admin
+    </label>
+    <button type="submit">Add user</button>
+  </form>
+</div>
+
+{% endblock %}

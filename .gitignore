@@ -1,0 +1,12 @@
+# Data — never commit the actual finances
+data/
+*.db
+*.sqlite3
+*.xlsx
+
+.venv/
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+.env

@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Investments · Hisaab{% endblock %}
+{% block content %}
+
+<h1>Investments</h1>
+
+{% if last %}
+<div class="cards">
+  <div class="card"><div class="label">Net worth</div><div class="value">{{ last.net_worth_inr | inr }}</div>
+    <div class="sub">{{ month_names[last.month - 1] }} {{ last.year }}</div></div>
+  <div class="card"><div class="label">India</div><div class="value">{{ last.india_value | inr }}</div>
+    <div class="sub {{ 'pos' if last.india_pct >= 0 else 'neg' }}">{{ '%+.1f' % last.india_pct }}%</div></div>
+  <div class="card"><div class="label">Germany</div><div class="value">{{ last.germany_value | eur }}</div>
+    <div class="sub {{ 'pos' if last.germany_pct >= 0 else 'neg' }}">{{ '%+.1f' % last.germany_pct }}%</div></div>
+  <div class="card"><div class="label">Overall profit</div>
+    <div class="value {{ 'pos' if last.profit_inr >= 0 else 'neg' }}">{{ last.profit_inr | inr }}</div>
+    <div class="sub {{ 'pos' if last.overall_pct >= 0 else 'neg' }}">{{ '%+.1f' % last.overall_pct }}%</div></div>
+</div>
+{% endif %}
+
+{% if rows | length > 1 %}
+<div class="panel">
+  <h2>Net worth over time (&#8377;)</h2>
+  <p class="small muted" style="margin-top:0">India + Germany combined, converted at each month's EUR&rarr;INR rate.</p>
+  <div class="chart-wrap"><canvas id="networthChart"></canvas></div>
+</div>
+
+<div class="chart-grid">
+  <div class="panel">
+    <h2>India (&#8377;)</h2>
+    <div class="chart-wrap short"><canvas id="indiaChart"></canvas></div>
+  </div>
+  <div class="panel">
+    <h2>Germany (&euro;)</h2>
+    <div class="chart-wrap short"><canvas id="germanyChart"></canvas></div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Overall profit %</h2>
+  <p class="small muted" style="margin-top:0">Profit relative to what you put in. Above the dashed line you're in the green.</p>
+  <div class="chart-wrap short"><canvas id="pctChart"></canvas></div>
+</div>
+{% endif %}
+
+<div class="panel">
+  <h2 style="margin-top:0">Add / update a month</h2>
+  <p class="small muted">Saving an existing year + month overwrites that row. Net worth and profit % are computed automatically.</p>
+  <form class="inline" method="post" action="/investments">
+    <label class="field">Year
+      <input type="number" name="year" value="{{ def_year }}" min="2000" max="2100" required style="width:6rem">
+    </label>
+    <label class="field">Month
+      <select name="month">
+        {% for name in month_names %}
+        <option value="{{ loop.index }}" {% if loop.index == def_month %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="field">India value (₹)
+      <input type="number" step="0.01" name="india_value" required>
+    </label>
+    <label class="field">India profit (₹)
+      <input type="number" step="0.01" name="india_profit" value="0">
+    </label>
+    <label class="field">Germany value (€)
+      <input type="number" step="0.01" name="germany_value" required>
+    </label>
+    <label class="field">Germany profit (€)
+      <input type="number" step="0.01" name="germany_profit" value="0">
+    </label>
+    <label class="field">EUR→INR rate
+      <input type="number" step="0.001" name="eur_inr_rate" value="{{ last.eur_inr_rate if last else 110.0 }}" style="width:6.5rem">
+    </label>
+    <button type="submit">Save</button>
+  </form>
+</div>
+
+{% if rows %}
+<div class="panel">
+  <div class="table-scroll"><table>
+    <thead><tr>
+      <th>Month</th><th>India (₹)</th><th>India %</th>
+      <th>Germany (€)</th><th>Germany %</th>
+      <th>Net worth (₹)</th><th>Profit (₹)</th><th>Overall %</th><th></th>
+    </tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ month_names[r.month - 1][:3] }} {{ r.year }}</td>
+        <td>{{ r.india_value | inr }}</td>
+        <td class="{{ 'pos' if r.india_pct >= 0 else 'neg' }}">{{ '%+.1f' % r.india_pct }}%</td>
+        <td>{{ r.germany_value | eur }}</td>
+        <td class="{{ 'pos' if r.germany_pct >= 0 else 'neg' }}">{{ '%+.1f' % r.germany_pct }}%</td>
+        <td>{{ r.net_worth_inr | inr }}</td>
+        <td class="{{ 'pos' if r.profit_inr >= 0 else 'neg' }}">{{ r.profit_inr | inr }}</td>
+        <td class="{{ 'pos' if r.overall_pct >= 0 else 'neg' }}">{{ '%+.1f' % r.overall_pct }}%</td>
+        <td style="width:1%">
+          <form method="post" action="/investments/{{ r.id }}/delete"
+                onsubmit="return confirm('Delete {{ month_names[r.month - 1] }} {{ r.year }}?')">
+            <button class="danger" type="submit" title="Delete">&#10005;</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% else %}
+<div class="notice">No investment data yet — add a month above or <a href="/import">import your Excel sheet</a>.</div>
+{% endif %}
+
+<script src="/static/chart.umd.js"></script>
+<script>
+const data = {{ chart_json | safe }};
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+Chart.defaults.color = css('--muted');
+Chart.defaults.borderColor = css('--grid');
+
+const labels = data.map(r => r.label);
+const line = (color, values, fill) => ({
+  data: values, borderColor: color, backgroundColor: fill || color,
+  borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, tension: 0.25, fill: !!fill,
+});
+const opts = (fmt, extra) => ({
+  responsive: true, maintainAspectRatio: false,
+  interaction: { mode: 'index', intersect: false },
+  plugins: { legend: { display: false },
+    tooltip: { callbacks: { label: c => ' ' + fmt(c.parsed.y), ...(extra || {}) } } },
+  scales: { y: { ticks: { callback: fmt } }, x: { grid: { display: false } } },
+});
+
+if (data.length > 1) {
+  const blue = css('--accent'), orange = css('--accent-2');
+  const soft = blue + '22';
+
+  new Chart(document.getElementById('networthChart'), {
+    type: 'line',
+    data: { labels, datasets: [line(blue, data.map(r => r.networth), soft)] },
+    options: opts(v => '₹' + (v / 100000).toFixed(1) + 'L',
+      { afterLabel: c => `Profit: ₹${data[c.dataIndex].profit.toLocaleString()}` }),
+  });
+
+  new Chart(document.getElementById('indiaChart'), {
+    type: 'line',
+    data: { labels, datasets: [line(blue, data.map(r => r.india))] },
+    options: opts(v => '₹' + (v / 100000).toFixed(1) + 'L'),
+  });
+
+  new Chart(document.getElementById('germanyChart'), {
+    type: 'line',
+    data: { labels, datasets: [line(orange, data.map(r => r.germany))] },
+    options: opts(v => '€' + v.toLocaleString()),
+  });
+
+  const pctOpts = opts(v => v.toFixed(1) + '%');
+  pctOpts.scales.y.grid = { color: ctx => ctx.tick.value === 0 ? css('--muted') : css('--grid') };
+  new Chart(document.getElementById('pctChart'), {
+    type: 'line',
+    data: { labels, datasets: [line(blue, data.map(r => r.overall_pct))] },
+    options: pctOpts,
+  });
+}
+</script>
+
+{% endblock %}
