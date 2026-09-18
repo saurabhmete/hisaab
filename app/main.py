@@ -426,14 +426,18 @@ def investments_page(request: Request):
     ]
     t = date.today()
     live_rate = rates.eur_inr()
-    # Historical rows keep the rate they were saved with; this shows what the
-    # latest holdings are worth at today's rate alongside that.
-    live_networth = None
-    if live_rate and last:
-        live_networth = (last["india_value"] or 0) + (last["germany_value"] or 0) * live_rate
-    return _render(request, "investments.html", rows=rows, last=last,
+    # Headline cards: latest holdings always valued at today's rate (saved rate
+    # only as offline fallback). Historical rows keep the rate they were saved
+    # with — the past isn't repainted when the currency moves.
+    head = None
+    if last:
+        head = dict(last)
+        if live_rate:
+            head["eur_inr_rate"] = live_rate
+            head.update(d.investment_derived(head))
+    return _render(request, "investments.html", rows=rows, last=last, head=head,
                    chart_json=json.dumps(chart), def_year=t.year, def_month=t.month,
-                   live_rate=live_rate, live_networth=live_networth)
+                   live_rate=live_rate)
 
 
 @app.post("/investments")

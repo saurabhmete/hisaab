@@ -4,20 +4,18 @@
 
 <h1>Investments</h1>
 
-{% if last %}
+{% if head %}
 <div class="cards">
-  <div class="card"><div class="label">Net worth</div><div class="value">{{ last.net_worth_inr | inr }}</div>
-    <div class="sub">{{ month_names[last.month - 1] }} {{ last.year }} at rate {{ last.eur_inr_rate }}</div>
-    {% if live_networth %}
-    <div class="sub">{{ live_networth | inr }} at today's ECB rate ({{ live_rate }})</div>
-    {% endif %}</div>
-  <div class="card"><div class="label">India</div><div class="value">{{ last.india_value | inr }}</div>
-    <div class="sub {{ 'pos' if last.india_pct >= 0 else 'neg' }}">{{ '%+.1f' % last.india_pct }}%</div></div>
-  <div class="card"><div class="label">Germany</div><div class="value">{{ last.germany_value | eur }}</div>
-    <div class="sub {{ 'pos' if last.germany_pct >= 0 else 'neg' }}">{{ '%+.1f' % last.germany_pct }}%</div></div>
+  <div class="card"><div class="label">Net worth</div><div class="value">{{ head.net_worth_inr | inr }}</div>
+    <div class="sub">{{ month_names[head.month - 1] }} {{ head.year }} holdings ·
+      {% if live_rate %}today's rate {{ live_rate }}{% else %}saved rate {{ head.eur_inr_rate }} (offline){% endif %}</div></div>
+  <div class="card"><div class="label">India</div><div class="value">{{ head.india_value | inr }}</div>
+    <div class="sub {{ 'pos' if head.india_pct >= 0 else 'neg' }}">{{ '%+.1f' % head.india_pct }}%</div></div>
+  <div class="card"><div class="label">Germany</div><div class="value">{{ head.germany_value | eur }}</div>
+    <div class="sub {{ 'pos' if head.germany_pct >= 0 else 'neg' }}">{{ '%+.1f' % head.germany_pct }}%</div></div>
   <div class="card"><div class="label">Overall profit</div>
-    <div class="value {{ 'pos' if last.profit_inr >= 0 else 'neg' }}">{{ last.profit_inr | inr }}</div>
-    <div class="sub {{ 'pos' if last.overall_pct >= 0 else 'neg' }}">{{ '%+.1f' % last.overall_pct }}%</div></div>
+    <div class="value {{ 'pos' if head.profit_inr >= 0 else 'neg' }}">{{ head.profit_inr | inr }}</div>
+    <div class="sub {{ 'pos' if head.overall_pct >= 0 else 'neg' }}">{{ '%+.1f' % head.overall_pct }}%</div></div>
 </div>
 {% endif %}
 
