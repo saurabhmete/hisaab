@@ -7,7 +7,10 @@
 {% if last %}
 <div class="cards">
   <div class="card"><div class="label">Net worth</div><div class="value">{{ last.net_worth_inr | inr }}</div>
-    <div class="sub">{{ month_names[last.month - 1] }} {{ last.year }}</div></div>
+    <div class="sub">{{ month_names[last.month - 1] }} {{ last.year }} at rate {{ last.eur_inr_rate }}</div>
+    {% if live_networth %}
+    <div class="sub">{{ live_networth | inr }} at today's ECB rate ({{ live_rate }})</div>
+    {% endif %}</div>
   <div class="card"><div class="label">India</div><div class="value">{{ last.india_value | inr }}</div>
     <div class="sub {{ 'pos' if last.india_pct >= 0 else 'neg' }}">{{ '%+.1f' % last.india_pct }}%</div></div>
   <div class="card"><div class="label">Germany</div><div class="value">{{ last.germany_value | eur }}</div>
@@ -70,7 +73,13 @@
       <input type="number" step="0.01" name="germany_profit" value="0">
     </label>
     <label class="field">EUR→INR rate
-      <input type="number" step="0.001" name="eur_inr_rate" value="{{ last.eur_inr_rate if last else 110.0 }}" style="width:6.5rem">
+      <input type="number" step="0.001" name="eur_inr_rate"
+             value="{{ live_rate if live_rate else (last.eur_inr_rate if last else 110.0) }}" style="width:6.5rem">
+      {% if live_rate %}
+      <span class="muted" style="font-size:0.72rem">live ECB rate — edit if you use your transfer rate</span>
+      {% else %}
+      <span class="muted" style="font-size:0.72rem">last used rate (live fetch unavailable)</span>
+      {% endif %}
     </label>
     <button type="submit">Save</button>
   </form>

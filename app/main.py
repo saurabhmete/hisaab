@@ -12,6 +12,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from . import database as d
 from . import importer
+from . import rates
 
 app = FastAPI(title="Hisaab")
 BASE = os.path.dirname(__file__)
@@ -424,8 +425,15 @@ def investments_page(request: Request):
         for r in rows
     ]
     t = date.today()
+    live_rate = rates.eur_inr()
+    # Historical rows keep the rate they were saved with; this shows what the
+    # latest holdings are worth at today's rate alongside that.
+    live_networth = None
+    if live_rate and last:
+        live_networth = (last["india_value"] or 0) + (last["germany_value"] or 0) * live_rate
     return _render(request, "investments.html", rows=rows, last=last,
-                   chart_json=json.dumps(chart), def_year=t.year, def_month=t.month)
+                   chart_json=json.dumps(chart), def_year=t.year, def_month=t.month,
+                   live_rate=live_rate, live_networth=live_networth)
 
 
 @app.post("/investments")
