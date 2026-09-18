@@ -7,6 +7,18 @@ Raspberry Pi behind [Tailscale](https://tailscale.com).
 *Hisaab* (हिसाब) — Hindi for "accounts / the reckoning", as in *hisaab rakhna*, to
 keep one's accounts.
 
+## Screenshots
+
+*All numbers below are generated demo data.*
+
+| Dashboard | Month planner |
+|---|---|
+| ![Dashboard](docs/dashboard.png) | ![Month planner](docs/month-planner.png) |
+
+| Investments | Year grid |
+|---|---|
+| ![Investments](docs/investments.png) | ![Year grid](docs/year-grid.png) |
+
 ## Features
 
 - **Monthly view** — salary, per-category expenses, what's left after expenses and
