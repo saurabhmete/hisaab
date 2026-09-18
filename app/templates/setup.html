@@ -9,10 +9,22 @@
 <body>
 <div class="auth-wrap">
   <h1>&#128181; Welcome to Hisaab</h1>
+  {% if locked %}
+  <div class="panel">
+    <p style="margin-top:0"><strong>Hisaab isn't set up yet.</strong></p>
+    <p class="muted small" style="margin-bottom:0">
+      Creating the admin account requires the setup link, which is printed in the
+      server log when the app starts. If you run this server, check
+      <code>docker compose logs hisaab</code> and open the <code>/setup?token=…</code>
+      URL it shows.
+    </p>
+  </div>
+  {% else %}
   <p class="muted" style="text-align:center">Create the admin account. Only admins can add or remove users later.</p>
   {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
   <div class="panel">
     <form method="post" action="/setup">
+      <input type="hidden" name="token" value="{{ token }}">
       <label class="field">Username
         <input name="username" autocomplete="username" autofocus required>
       </label>
@@ -25,6 +37,7 @@
       <button type="submit">Create admin account</button>
     </form>
   </div>
+  {% endif %}
 </div>
 </body>
 </html>

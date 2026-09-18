@@ -19,7 +19,11 @@ keep one's accounts.
   page (or `python import_excel.py file.xlsx`) to seed the database. After that
   the site is the source of truth; import stays available as an option.
 - **Users & login** — on first launch the app asks you to create an **admin**
-  account. Admins can add and remove users on the *Users* page (e.g. add your
+  account. The setup page is protected by a one-time token printed in the server
+  log (`docker compose logs hisaab`) — open the `/setup?token=…` link it shows,
+  so a publicly exposed fresh install can't be claimed by a stranger. (Set
+  `HISAAB_SETUP_TOKEN` to choose the token yourself; a random one is generated
+  per start otherwise.) Admins can add and remove users on the *Users* page (e.g. add your
   partner as a regular member); members can't manage users, and the last admin
   can never be deleted. Everyone shares the same household data.
   Prefer no login wall at all (Tailscale already limits who can reach the Pi)?

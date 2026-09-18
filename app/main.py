@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import secrets
 from datetime import date
 
 from fastapi import FastAPI, Form, Request, UploadFile
@@ -23,6 +24,15 @@ templates.env.globals["month_names"] = d.MONTH_NAMES
 
 SESSION_COOKIE = "hisaab_session"
 PUBLIC_PATHS = ("/login", "/setup", "/static")
+
+# First-run protection: creating the admin account requires this token, so a
+# publicly reachable fresh install can't be claimed by a stranger. The token is
+# printed to the server log (docker logs) — only the operator can read it.
+SETUP_TOKEN = os.environ.get("HISAAB_SETUP_TOKEN") or secrets.token_urlsafe(16)
+
+
+def _setup_token_ok(token: str) -> bool:
+    return secrets.compare_digest(token or "", SETUP_TOKEN)
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -51,6 +61,18 @@ app.add_middleware(AuthMiddleware)
 @app.on_event("startup")
 def startup():
     d.init_db()
+    with d.get_db() as db:
+        if d.user_count(db) == 0:
+            print(
+                "\n"
+                "==============================================================\n"
+                " Hisaab first-run setup — create the admin account here:\n"
+                f"   /setup?token={SETUP_TOKEN}\n"
+                " (prepend your server's URL; this link is required so that\n"
+                "  only you, not the public, can claim the admin account)\n"
+                "==============================================================\n",
+                flush=True,
+            )
 
 
 def _render(request, template, **ctx):
@@ -75,23 +97,38 @@ def _next_open_month(db):
 # ---------- auth ----------
 
 @app.get("/setup")
-def setup_page(request: Request):
+def setup_page(request: Request, token: str = ""):
     with d.get_db() as db:
         if d.user_count(db) > 0:
             return RedirectResponse("/login", status_code=303)
-    return templates.TemplateResponse("setup.html", {"request": request, "error": None})
+    if not _setup_token_ok(token):
+        return templates.TemplateResponse(
+            "setup.html", {"request": request, "locked": True, "error": None},
+            status_code=403,
+        )
+    return templates.TemplateResponse(
+        "setup.html", {"request": request, "locked": False, "error": None, "token": token}
+    )
 
 
 @app.post("/setup")
 def setup_submit(request: Request, username: str = Form(...), password: str = Form(...),
-                 password2: str = Form(...)):
+                 password2: str = Form(...), token: str = Form("")):
+    if not _setup_token_ok(token):
+        return templates.TemplateResponse(
+            "setup.html", {"request": request, "locked": True, "error": None},
+            status_code=403,
+        )
     error = None
     if len(password) < 8:
         error = "Password needs at least 8 characters."
     elif password != password2:
         error = "Passwords don't match."
     if error:
-        return templates.TemplateResponse("setup.html", {"request": request, "error": error})
+        return templates.TemplateResponse(
+            "setup.html",
+            {"request": request, "locked": False, "error": error, "token": token},
+        )
     with d.get_db() as db:
         if d.user_count(db) > 0:
             return RedirectResponse("/login", status_code=303)
