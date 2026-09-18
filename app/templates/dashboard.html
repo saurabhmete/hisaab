@@ -1,18 +1,22 @@
 {% extends "base.html" %}
 {% block content %}
 
+{% set pv_y = sel_year if sel_month > 1 else sel_year - 1 %}
+{% set pv_m = sel_month - 1 if sel_month > 1 else 12 %}
+{% set nx_y = sel_year if sel_month < 12 else sel_year + 1 %}
+{% set nx_m = sel_month + 1 if sel_month < 12 else 1 %}
 <div class="month-nav" style="justify-content: space-between; width: 100%">
   <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap">
+    <a class="navarrow" href="/?year={{ pv_y }}&month={{ pv_m }}" title="{{ month_names[pv_m - 1] }}">&larr;</a>
+    <h1>{{ month_names[sel_month - 1] }} {{ sel_year }}</h1>
+    <a class="navarrow" href="/?year={{ nx_y }}&month={{ nx_m }}" title="{{ month_names[nx_m - 1] }}">&rarr;</a>
     {% if current %}
-    <h1>{{ month_names[current.row.month - 1] }} {{ current.row.year }}</h1>
     <a class="btn secondary" href="/month/{{ current.row.year }}/{{ current.row.month }}">Edit</a>
-    {% else %}
-    <h1>Dashboard</h1>
     {% endif %}
   </div>
   <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap">
     <a class="btn" href="/month/{{ next_y }}/{{ next_m }}">+ Add {{ month_names[next_m - 1] }} {{ next_y }}</a>
-    <form class="inline" method="get" action="/goto" style="gap:0.3rem">
+    <form class="inline" method="get" action="/" style="gap:0.3rem">
       <select name="month" aria-label="Month">
         {% for name in month_names %}
         <option value="{{ loop.index }}" {% if loop.index == sel_month %}selected{% endif %}>{{ name[:3] }}</option>
@@ -57,8 +61,9 @@
 {% endif %}
 {% else %}
 <div class="notice">
-  No data yet. <a href="/month/{{ today.year }}/{{ today.month }}">Add this month</a>
-  or <a href="/import">import your Excel sheet</a> to get started.
+  Nothing recorded for {{ month_names[sel_month - 1] }} {{ sel_year }} yet.
+  <a href="/month/{{ sel_year }}/{{ sel_month }}">Plan it</a>
+  or <a href="/import">import your Excel sheet</a>.
 </div>
 {% endif %}
 

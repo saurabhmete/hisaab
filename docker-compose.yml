@@ -4,6 +4,6 @@ services:
     container_name: hisaab
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${HISAAB_PORT:-8000}:8000"
     volumes:
       - ./data:/hisaab/data
