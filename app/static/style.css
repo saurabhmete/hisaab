@@ -240,6 +240,22 @@ code, kbd {
   background: var(--accent-soft); border-radius: 6px; padding: 0.1em 0.4em;
 }
 
+/* ---------- privacy (demo) mode: blur every money-bearing element ---------- */
+
+#privacybtn { display: inline-flex; align-items: center; }
+body.privacy .card .value,
+body.privacy .card .sub,
+body.privacy td:not(:first-child),
+body.privacy canvas,
+body.privacy .editor-total span:last-child,
+body.privacy .ledger-row > span:last-child,
+body.privacy .savebar span,
+body.privacy input[type="number"] {
+  filter: blur(8px);
+  transition: filter 150ms ease-out;
+}
+body.privacy canvas { filter: blur(14px); }
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
