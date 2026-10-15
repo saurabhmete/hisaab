@@ -13,6 +13,12 @@ from datetime import date, timedelta
 MAX_MONTHS = 1200  # guard against EMIs that never clear the loan
 EPS = 0.005
 
+# code -> symbol shown before amounts
+CURRENCIES = {
+    "EUR": "€", "INR": "₹", "USD": "$", "GBP": "£",
+    "CHF": "CHF ", "AED": "AED ", "CAD": "C$", "AUD": "A$",
+}
+
 
 def parse_date(value) -> date:
     return value if isinstance(value, date) else date.fromisoformat(value)
@@ -219,6 +225,50 @@ def set_rate(db, loan_id, start_date, rate):
            ON CONFLICT(loan_id, start_date) DO UPDATE SET rate=excluded.rate""",
         (loan_id, start_date, rate),
     )
+
+
+_KINDS = {"emi": ("loan_emis", "amount"), "rate": ("loan_rates", "rate")}
+
+
+def _value_on(db, table, column, loan_id, on):
+    """Value of the entry in force on ISO date `on` (the first entry if `on`
+    precedes them all), or None when the loan has no entries."""
+    row = db.execute(
+        f"SELECT {column} AS v FROM {table} WHERE loan_id=? AND start_date<=? "
+        f"ORDER BY start_date DESC LIMIT 1", (loan_id, on)).fetchone()
+    if row is None:
+        row = db.execute(
+            f"SELECT {column} AS v FROM {table} WHERE loan_id=? ORDER BY start_date LIMIT 1",
+            (loan_id,)).fetchone()
+    return row["v"] if row else None
+
+
+def set_period(db, kind, loan_id, start, end, value):
+    """Record `value` (an EMI or a rate) from `start`. With `end`, it applies
+    only through that day and whatever was in force afterwards resumes — the
+    shape of a floating-rate reset or a temporary EMI. Entries recorded inside
+    the window are replaced by it."""
+    table, column = _KINDS[kind]
+    if not end:
+        db.execute(
+            f"INSERT INTO {table} (loan_id, start_date, {column}) VALUES (?, ?, ?) "
+            f"ON CONFLICT(loan_id, start_date) DO UPDATE SET {column}=excluded.{column}",
+            (loan_id, start, value))
+        return
+    first, last = parse_date(start), parse_date(end)
+    if last < first:
+        raise ValueError("The 'until' date can't be before the start date.")
+    resume_on = (last + timedelta(days=1)).isoformat()
+    resume_value = _value_on(db, table, column, loan_id, resume_on)
+    has_entry_at_resume = db.execute(
+        f"SELECT 1 FROM {table} WHERE loan_id=? AND start_date=?", (loan_id, resume_on)).fetchone()
+    db.execute(f"DELETE FROM {table} WHERE loan_id=? AND start_date>=? AND start_date<=?",
+               (loan_id, start, last.isoformat()))
+    db.execute(f"INSERT INTO {table} (loan_id, start_date, {column}) VALUES (?, ?, ?)",
+               (loan_id, start, value))
+    if resume_value is not None and not has_entry_at_resume:
+        db.execute(f"INSERT INTO {table} (loan_id, start_date, {column}) VALUES (?, ?, ?)",
+                   (loan_id, resume_on, resume_value))
 
 
 def delete_emi(db, loan_id, emi_id):

@@ -30,9 +30,11 @@ keep one's accounts.
 - **Year grid** — the classic spreadsheet layout: categories × months.
 - **Investments** — India (₹) and Germany (€) values and profits per month; net
   worth in INR, profit percentages, and the EUR→INR conversion are computed for you.
-- **Loans & EMIs** — track any loan in EUR or INR: amount, start date, tenure, and
+- **Loans & EMIs** — track any loan (EUR, INR, USD, GBP, CHF, AED, CAD or AUD): amount, start date, tenure, and
   separate dated histories for the **EMI** and the **interest rate**, so a change
-  from a given date is recorded instead of overwriting the past. For each loan you
+  from a given date is recorded instead of overwriting the past. Floating rate or
+  a temporary EMI? Give the change a *from* and an *until* date and the previous
+  value resumes automatically. For each loan you
   get the outstanding principal, principal repaid, interest paid so far, EMIs
   left, projected end date (and how far ahead/behind the original tenure you are),
   total interest over the loan, a balance-over-time chart, principal-vs-interest

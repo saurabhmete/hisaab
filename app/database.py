@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS loans (
     id            INTEGER PRIMARY KEY,
     name          TEXT NOT NULL,
     lender        TEXT NOT NULL DEFAULT '',
-    currency      TEXT NOT NULL DEFAULT 'EUR' CHECK (currency IN ('EUR', 'INR')),
+    currency      TEXT NOT NULL DEFAULT 'EUR',
     principal     REAL NOT NULL CHECK (principal > 0),
     start_date    TEXT NOT NULL,
     tenure_months INTEGER,
@@ -104,6 +104,44 @@ def init_db():
     os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
     with get_db() as db:
         db.executescript(SCHEMA)
+    _drop_loan_currency_check()
+
+
+def _drop_loan_currency_check():
+    """Early databases created `loans` with CHECK (currency IN ('EUR','INR')).
+    SQLite can't drop a constraint in place, so rebuild the table once, with
+    foreign keys off so the child tables' rows aren't cascade-deleted."""
+    db = sqlite3.connect(DB_PATH)
+    try:
+        row = db.execute("SELECT sql FROM sqlite_master WHERE name='loans'").fetchone()
+        if not row or "currency IN" not in row[0]:
+            return
+        db.execute("PRAGMA foreign_keys = OFF")
+        db.executescript("""
+            BEGIN;
+            CREATE TABLE loans_new (
+                id            INTEGER PRIMARY KEY,
+                name          TEXT NOT NULL,
+                lender        TEXT NOT NULL DEFAULT '',
+                currency      TEXT NOT NULL DEFAULT 'EUR',
+                principal     REAL NOT NULL CHECK (principal > 0),
+                start_date    TEXT NOT NULL,
+                tenure_months INTEGER,
+                notes         TEXT NOT NULL DEFAULT '',
+                created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            INSERT INTO loans_new
+                SELECT id, name, lender, currency, principal, start_date,
+                       tenure_months, notes, created_at FROM loans;
+            DROP TABLE loans;
+            ALTER TABLE loans_new RENAME TO loans;
+            COMMIT;
+        """)
+        db.execute("PRAGMA foreign_keys = ON")
+        if db.execute("PRAGMA foreign_key_check").fetchall():
+            raise RuntimeError("loans table rebuild left dangling references")
+    finally:
+        db.close()
 
 
 @contextmanager

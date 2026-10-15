@@ -108,6 +108,115 @@ def test_loan_cleared_by_large_prepayment_is_closed():
     assert s["closed"] and s["outstanding"] == 0 and rows[-1]["closing"] == 0
 
 
+# ---------- windowed EMI / rate changes, currency migration ----------
+
+import os
+import sqlite3
+import tempfile
+
+from app import database as D
+
+
+def _memory_db():
+    db = sqlite3.connect(":memory:")
+    db.row_factory = sqlite3.Row
+    db.executescript(D.SCHEMA)
+    L.create_loan(db, "Test", "", "USD", 100_000, "2025-01-15", 60, "", 2_000, 8.5)
+    return db
+
+
+def _entries(db, table, column):
+    return [(r["start_date"], r[column]) for r in
+            db.execute(f"SELECT start_date, {column} FROM {table} WHERE loan_id=1 ORDER BY start_date")]
+
+
+def test_rate_window_restores_previous_rate_afterwards():
+    db = _memory_db()
+    L.set_period(db, "rate", 1, "2025-06-15", "2025-12-14", 9.5)
+    assert _entries(db, "loan_rates", "rate") == [
+        ("2025-01-15", 8.5), ("2025-06-15", 9.5), ("2025-12-15", 8.5)]
+
+
+def test_window_without_end_is_a_permanent_change():
+    db = _memory_db()
+    L.set_period(db, "emi", 1, "2025-06-15", None, 2_500)
+    assert _entries(db, "loan_emis", "amount") == [("2025-01-15", 2_000), ("2025-06-15", 2_500)]
+
+
+def test_window_keeps_a_later_entry_instead_of_duplicating_it():
+    db = _memory_db()
+    L.set_period(db, "rate", 1, "2025-09-01", None, 7.0)          # known future change
+    L.set_period(db, "rate", 1, "2025-06-15", "2025-08-31", 9.5)  # window ends right before it
+    assert _entries(db, "loan_rates", "rate") == [
+        ("2025-01-15", 8.5), ("2025-06-15", 9.5), ("2025-09-01", 7.0)]
+
+
+def test_window_swallows_entries_inside_it_and_resumes_what_was_in_force():
+    db = _memory_db()
+    L.set_period(db, "rate", 1, "2025-03-01", None, 9.0)
+    L.set_period(db, "rate", 1, "2025-02-01", "2025-04-30", 10.0)
+    assert _entries(db, "loan_rates", "rate") == [
+        ("2025-01-15", 8.5), ("2025-02-01", 10.0), ("2025-05-01", 9.0)]
+
+
+def test_window_ending_before_it_starts_is_rejected():
+    db = _memory_db()
+    try:
+        L.set_period(db, "rate", 1, "2025-06-15", "2025-06-01", 9.5)
+    except ValueError:
+        return
+    raise AssertionError("expected ValueError")
+
+
+def test_rate_window_only_changes_interest_inside_the_window():
+    db = _memory_db()
+    plain = L.load(db, L.get_loan(db, 1), date(2030, 1, 1))["rows"]
+    L.set_period(db, "rate", 1, "2025-06-15", "2025-08-14", 12.0)
+    windowed = L.load(db, L.get_loan(db, 1), date(2030, 1, 1))["rows"]
+    inside = {date(2025, 7, 15), date(2025, 8, 15)}   # installments priced at 12%
+    for a, b in zip(plain[:6], windowed[:6]):
+        if b["due"] in inside:
+            assert b["interest"] > a["interest"]
+    assert windowed[0]["interest"] == plain[0]["interest"]      # before the window
+    assert len(windowed) >= len(plain)
+
+
+def test_every_listed_currency_has_a_symbol():
+    assert {"EUR", "INR", "USD", "GBP"} <= set(L.CURRENCIES)
+    assert all(L.CURRENCIES.values())
+
+
+def test_old_two_currency_check_is_rebuilt_without_losing_loans():
+    old_schema = """
+    CREATE TABLE loans (id INTEGER PRIMARY KEY, name TEXT NOT NULL, lender TEXT NOT NULL DEFAULT '',
+        currency TEXT NOT NULL DEFAULT 'EUR' CHECK (currency IN ('EUR', 'INR')),
+        principal REAL NOT NULL CHECK (principal > 0), start_date TEXT NOT NULL,
+        tenure_months INTEGER, notes TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')));
+    CREATE TABLE loan_emis (id INTEGER PRIMARY KEY, loan_id INTEGER NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
+        start_date TEXT NOT NULL, amount REAL NOT NULL, UNIQUE (loan_id, start_date));
+    INSERT INTO loans (name, currency, principal, start_date) VALUES ('Old loan', 'INR', 500000, '2024-01-01');
+    INSERT INTO loan_emis (loan_id, start_date, amount) VALUES (1, '2024-01-01', 9000);
+    """
+    path = os.path.join(tempfile.mkdtemp(), "old.db")
+    raw = sqlite3.connect(path)
+    raw.executescript(old_schema)
+    raw.commit()
+    raw.close()
+    saved, D.DB_PATH = D.DB_PATH, path
+    try:
+        D._drop_loan_currency_check()
+        D._drop_loan_currency_check()          # idempotent
+        db = sqlite3.connect(path)
+        db.execute("PRAGMA foreign_keys = ON")
+        assert db.execute("SELECT name, currency FROM loans").fetchall() == [("Old loan", "INR")]
+        assert db.execute("SELECT amount FROM loan_emis").fetchall() == [(9000.0,)]
+        db.execute("INSERT INTO loans (name, currency, principal, start_date) VALUES ('Dollar', 'USD', 1, '2025-01-01')")
+        assert db.execute("PRAGMA foreign_key_check").fetchall() == []
+        db.close()
+    finally:
+        D.DB_PATH = saved
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

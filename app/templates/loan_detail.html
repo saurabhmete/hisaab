@@ -96,12 +96,15 @@
     </table></div>
     <h2 class="small" style="margin-bottom:0.3rem">EMI changed</h2>
     <form class="inline" method="post" action="/loans/{{ loan.id }}/emi">
-      <label class="field">Effective from
+      <label class="field">From
         <input type="date" name="start_date" value="{{ today.isoformat() }}" required></label>
+      <label class="field"><span>Until <span class="muted">(optional)</span></span>
+        <input type="date" name="end_date"></label>
       <label class="field">New EMI
         <input type="number" step="0.01" min="0.01" name="amount" required style="width:7.5rem"></label>
       <button type="submit">Record</button>
     </form>
+    <p class="muted small" style="margin-bottom:0">Leave <em>Until</em> empty if the new EMI continues from that date. Set it for a temporary EMI &mdash; the previous amount resumes the day after.</p>
   </div>
 
   <div class="panel">
@@ -126,13 +129,15 @@
     </table></div>
     <h2 class="small" style="margin-bottom:0.3rem">Rate changed</h2>
     <form class="inline" method="post" action="/loans/{{ loan.id }}/rate">
-      <label class="field">Effective from
+      <label class="field">From
         <input type="date" name="start_date" value="{{ today.isoformat() }}" required></label>
+      <label class="field"><span>Until <span class="muted">(optional)</span></span>
+        <input type="date" name="end_date"></label>
       <label class="field">New rate (% p.a.)
         <input type="number" step="0.001" min="0" name="rate" required style="width:7.5rem"></label>
       <button type="submit">Record</button>
     </form>
-    <p class="muted small" style="margin-bottom:0">If your lender also changed the EMI, record that under EMI history. If it kept the EMI, the loan just gets shorter or longer.</p>
+    <p class="muted small" style="margin-bottom:0">For a floating rate, set <em>From</em> and <em>Until</em> and the previous rate resumes the day after. Leave <em>Until</em> empty for a permanent change. If your lender also changed the EMI, record that under EMI history; if it kept the EMI, the loan just gets shorter or longer.</p>
   </div>
 </div>
 
@@ -203,8 +208,9 @@
       <label class="field">Lender <input name="lender" value="{{ loan.lender }}"></label>
       <label class="field">Currency
         <select name="currency">
-          <option value="EUR" {% if cur == 'EUR' %}selected{% endif %}>EUR (€)</option>
-          <option value="INR" {% if cur == 'INR' %}selected{% endif %}>INR (₹)</option>
+          {% for code, sym in currencies.items() %}
+          <option value="{{ code }}" {% if cur == code %}selected{% endif %}>{{ code }} ({{ sym.strip() }})</option>
+          {% endfor %}
         </select></label>
       <label class="field">Loan amount
         <input type="number" step="0.01" min="0.01" name="principal" value="{{ '%g' % loan.principal }}" required></label>
@@ -237,9 +243,9 @@ const short = v => {
     if (v >= 1e5) return '₹' + (v / 1e5).toFixed(1) + 'L';
     return '₹' + v.toLocaleString();
   }
-  if (v >= 1e6) return '€' + (v / 1e6).toFixed(1) + 'M';
-  if (v >= 1e3) return '€' + (v / 1e3).toFixed(0) + 'k';
-  return '€' + v;
+  if (v >= 1e6) return c.symbol + (v / 1e6).toFixed(1) + 'M';
+  if (v >= 1e3) return c.symbol + (v / 1e3).toFixed(0) + 'k';
+  return c.symbol + v;
 };
 const blue = css('--accent'), orange = css('--accent-2');
 

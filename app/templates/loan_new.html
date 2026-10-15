@@ -20,8 +20,9 @@
     </label>
     <label class="field">Currency
       <select name="currency" id="currency">
-        <option value="EUR" {% if form.currency != 'INR' %}selected{% endif %}>EUR (€)</option>
-        <option value="INR" {% if form.currency == 'INR' %}selected{% endif %}>INR (₹)</option>
+        {% for code, sym in currencies.items() %}
+        <option value="{{ code }}" {% if (form.currency or 'EUR') == code %}selected{% endif %}>{{ code }} ({{ sym.strip() }})</option>
+        {% endfor %}
       </select>
     </label>
     <label class="field">Loan amount
@@ -64,9 +65,10 @@
 
 <script>
 const $ = id => document.getElementById(id);
+const SYMBOLS = {{ currencies | tojson }};
 function preview() {
   const p = parseFloat($('principal').value), r = parseFloat($('rate').value), n = parseInt($('tenure').value, 10);
-  const sym = $('currency').value === 'INR' ? '₹' : '€';
+  const sym = SYMBOLS[$('currency').value] || '';
   $('tenurehint').textContent = n > 0
     ? `${n} months = ${Math.floor(n / 12)} yr${n % 12 ? ' ' + (n % 12) + ' mo' : ''}` : '12 months = 1 year';
   if (p > 0 && r >= 0 && n > 0) {

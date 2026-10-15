@@ -25,12 +25,13 @@ templates.env.filters["inr"] = lambda v: f"₹{v:,.0f}" if v is not None else "�
 def _money(value, currency="EUR", decimals=0):
     if value is None:
         return "—"
-    symbol = "₹" if currency == "INR" else "€"
+    symbol = loans.CURRENCIES.get(currency, f"{currency} ")
     return f"{symbol}{value:,.{decimals}f}"
 
 
 templates.env.filters["money"] = _money
 templates.env.globals["month_names"] = d.MONTH_NAMES
+templates.env.globals["currencies"] = loans.CURRENCIES
 
 SESSION_COOKIE = "hisaab_session"
 PUBLIC_PATHS = ("/login", "/setup", "/static")
@@ -499,8 +500,8 @@ def _loan_values(name, lender, currency, principal, start_date, tenure_months, n
     name = name.strip()
     if not name:
         raise ValueError("Give the loan a name.")
-    if currency not in ("EUR", "INR"):
-        raise ValueError("Currency must be EUR or INR.")
+    if currency not in loans.CURRENCIES:
+        raise ValueError("Pick one of the listed currencies.")
     if principal <= 0:
         raise ValueError("The loan amount must be greater than zero.")
     try:
@@ -609,7 +610,7 @@ def loan_detail(request: Request, loan_id: int, error: str = ""):
             {"year": y["year"], "principal": round(y["principal"], 2), "interest": round(y["interest"], 2)}
             for y in loans.yearly(rows)
         ],
-        "symbol": "₹" if loan["currency"] == "INR" else "€",
+        "symbol": loans.CURRENCIES.get(loan["currency"], loan["currency"] + " "),
     }
     return _render(
         request, "loan_detail.html", **data, chart_json=json.dumps(chart),
@@ -640,12 +641,29 @@ def loan_delete(loan_id: int):
     return RedirectResponse("/loans", status_code=303)
 
 
-@app.post("/loans/{loan_id}/emi")
-def loan_emi_add(loan_id: int, start_date: str = Form(...), amount: float = Form(...)):
-    if _valid_date(start_date) and amount > 0:
-        with d.get_db() as db:
-            loans.set_emi(db, loan_id, start_date, amount)
+def _record_period(kind, loan_id, start_date, end_date, value, value_ok):
+    """Shared by the EMI and rate forms; `end_date` empty means 'from now on'."""
+    end_date = end_date.strip()
+    problem = None
+    if not _valid_date(start_date) or (end_date and not _valid_date(end_date)):
+        problem = "That date isn't valid."
+    elif not value_ok:
+        problem = "That value isn't valid."
+    else:
+        try:
+            with d.get_db() as db:
+                loans.set_period(db, kind, loan_id, start_date, end_date or None, value)
+        except ValueError as exc:
+            problem = str(exc)
+    if problem:
+        return RedirectResponse(f"/loans/{loan_id}?error={problem.replace(' ', '+')}", status_code=303)
     return RedirectResponse(f"/loans/{loan_id}", status_code=303)
+
+
+@app.post("/loans/{loan_id}/emi")
+def loan_emi_add(loan_id: int, start_date: str = Form(...), amount: float = Form(...),
+                 end_date: str = Form("")):
+    return _record_period("emi", loan_id, start_date, end_date, amount, amount > 0)
 
 
 @app.post("/loans/{loan_id}/emi/{emi_id}/delete")
@@ -656,11 +674,9 @@ def loan_emi_delete(loan_id: int, emi_id: int):
 
 
 @app.post("/loans/{loan_id}/rate")
-def loan_rate_add(loan_id: int, start_date: str = Form(...), rate: float = Form(...)):
-    if _valid_date(start_date) and rate >= 0:
-        with d.get_db() as db:
-            loans.set_rate(db, loan_id, start_date, rate)
-    return RedirectResponse(f"/loans/{loan_id}", status_code=303)
+def loan_rate_add(loan_id: int, start_date: str = Form(...), rate: float = Form(...),
+                  end_date: str = Form("")):
+    return _record_period("rate", loan_id, start_date, end_date, rate, rate >= 0)
 
 
 @app.post("/loans/{loan_id}/rate/{rate_id}/delete")
