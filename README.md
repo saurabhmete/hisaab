@@ -19,6 +19,10 @@ keep one's accounts.
 |---|---|
 | ![Investments](docs/investments.png) | ![Year grid](docs/year-grid.png) |
 
+| Loan detail |
+|---|
+| ![Loan detail](docs/loan-detail.png) |
+
 ## Features
 
 - **Monthly view** — salary, per-category expenses, what's left after expenses and
@@ -26,6 +30,15 @@ keep one's accounts.
 - **Year grid** — the classic spreadsheet layout: categories × months.
 - **Investments** — India (₹) and Germany (€) values and profits per month; net
   worth in INR, profit percentages, and the EUR→INR conversion are computed for you.
+- **Loans & EMIs** — track any loan in EUR or INR: amount, start date, tenure, and
+  separate dated histories for the **EMI** and the **interest rate**, so a change
+  from a given date is recorded instead of overwriting the past. For each loan you
+  get the outstanding principal, principal repaid, interest paid so far, EMIs
+  left, projected end date (and how far ahead/behind the original tenure you are),
+  total interest over the loan, a balance-over-time chart, principal-vs-interest
+  per year, support for part-payments (prepayments), and the full amortization
+  schedule. EMIs of euro loans can be added to a month's plan with one click.
+  The maths is covered by tests (`python -m tests.test_loans`).
 - **Dashboard** — salary vs expenses vs invested per month, and a net-worth trend.
 - **Excel import** — upload the original "Salary Plan" workbook on the *Import*
   page (or `python import_excel.py file.xlsx`) to seed the database. After that

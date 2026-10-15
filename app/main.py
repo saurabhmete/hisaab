@@ -12,6 +12,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from . import database as d
 from . import importer
+from . import loans
 from . import rates
 
 app = FastAPI(title="Hisaab")
@@ -21,6 +22,14 @@ templates = Jinja2Templates(directory=os.path.join(BASE, "templates"))
 templates.env.filters["eur"] = lambda v: f"€{v:,.0f}" if v is not None else "—"
 templates.env.filters["eur2"] = lambda v: f"€{v:,.2f}".rstrip("0").rstrip(".") if v is not None else "—"
 templates.env.filters["inr"] = lambda v: f"₹{v:,.0f}" if v is not None else "—"
+def _money(value, currency="EUR", decimals=0):
+    if value is None:
+        return "—"
+    symbol = "₹" if currency == "INR" else "€"
+    return f"{symbol}{value:,.{decimals}f}"
+
+
+templates.env.filters["money"] = _money
 templates.env.globals["month_names"] = d.MONTH_NAMES
 
 SESSION_COOKIE = "hisaab_session"
@@ -313,12 +322,34 @@ def month_page(request: Request, year: int, month: int, saved: int = 0):
         rate_row = db.execute(
             "SELECT eur_inr_rate FROM investments ORDER BY year DESC, month DESC LIMIT 1"
         ).fetchone()
+
+        # EMIs of euro loans that fall due this month, offered as expense rows.
+        # (INR loans are skipped: the planner is in euros.)
+        planned = {i["category"].lower(): i["amount"] for i in items}
+        loan_emis = []
+        for ln in loans.all_loans(db):
+            if ln["currency"] != "EUR":
+                continue
+            due = next(
+                (r for r in loans.load(db, ln, date.today())["rows"]
+                 if r["due"].year == year and r["due"].month == month),
+                None,
+            )
+            if due is None:
+                continue
+            category = f"EMI: {ln['name']}"
+            amount = round(due["emi"], 2)
+            current = planned.get(category.lower())
+            if current is None or abs(current - amount) > 0.005:
+                loan_emis.append({"category": category, "amount": amount,
+                                  "replaces": current is not None})
     return _render(
         request, "month.html",
         year=year, month=month, exists=row is not None, prefilled=prefilled,
         salary=salary, invested=invested, items=items, summary=summary,
         categories=[c["category"] for c in cats], saved=saved,
         eur_inr_rate=rate_row["eur_inr_rate"] if rate_row else None,
+        loan_emis=loan_emis,
     )
 
 
@@ -458,6 +489,201 @@ def remove_investment(inv_id: int):
     with d.get_db() as db:
         d.delete_investment(db, inv_id)
     return RedirectResponse("/investments", status_code=303)
+
+
+# ---------- loans ----------
+
+def _loan_values(name, lender, currency, principal, start_date, tenure_months, notes):
+    """Validate the fields shared by create and edit. Raises ValueError with a
+    message fit to show the user."""
+    name = name.strip()
+    if not name:
+        raise ValueError("Give the loan a name.")
+    if currency not in ("EUR", "INR"):
+        raise ValueError("Currency must be EUR or INR.")
+    if principal <= 0:
+        raise ValueError("The loan amount must be greater than zero.")
+    try:
+        date.fromisoformat(start_date)
+    except ValueError:
+        raise ValueError("The start date is not a valid date.")
+    tenure = None
+    if tenure_months.strip():
+        try:
+            tenure = int(float(tenure_months))
+        except ValueError:
+            raise ValueError("Tenure must be a whole number of months.")
+        if not 0 < tenure <= loans.MAX_MONTHS:
+            raise ValueError(f"Tenure must be between 1 and {loans.MAX_MONTHS} months.")
+    return {"name": name, "lender": lender, "currency": currency, "principal": principal,
+            "start_date": start_date, "tenure_months": tenure, "notes": notes}
+
+
+def _valid_date(value: str) -> bool:
+    try:
+        date.fromisoformat(value)
+        return True
+    except ValueError:
+        return False
+
+
+@app.get("/loans")
+def loans_page(request: Request):
+    today = date.today()
+    with d.get_db() as db:
+        items = [loans.load(db, ln, today) for ln in loans.all_loans(db)]
+    totals = {}
+    for it in items:
+        s = it["summary"]
+        if not s["closed"]:
+            t = totals.setdefault(it["loan"]["currency"], {"outstanding": 0.0, "emi": 0.0})
+            t["outstanding"] += s["outstanding"]
+            t["emi"] += s["current_emi"] or 0
+    return _render(request, "loans.html", items=items, totals=totals)
+
+
+@app.get("/loans/new")
+def loan_new(request: Request):
+    form = {"currency": "EUR", "start_date": date.today().isoformat()}
+    return _render(request, "loan_new.html", form=form, error=None)
+
+
+@app.post("/loans")
+def loan_create(
+    request: Request, name: str = Form(""), lender: str = Form(""), currency: str = Form("EUR"),
+    principal: float = Form(0), start_date: str = Form(""), rate: float = Form(0),
+    tenure_months: str = Form(""), emi: str = Form(""), notes: str = Form(""),
+):
+    form = {"name": name, "lender": lender, "currency": currency, "principal": principal or "",
+            "start_date": start_date, "rate": rate, "tenure_months": tenure_months,
+            "emi": emi, "notes": notes}
+    try:
+        values = _loan_values(name, lender, currency, principal, start_date, tenure_months, notes)
+        if rate < 0:
+            raise ValueError("The interest rate can't be negative.")
+        if emi.strip():
+            try:
+                emi_amount = float(emi)
+            except ValueError:
+                raise ValueError("The EMI must be a number.")
+        elif values["tenure_months"]:
+            emi_amount = round(loans.calc_emi(principal, rate, values["tenure_months"]), 2)
+        else:
+            raise ValueError("Enter the EMI, or the tenure so it can be calculated.")
+        if emi_amount <= 0:
+            raise ValueError("The EMI must be greater than zero.")
+    except ValueError as exc:
+        return _render(request, "loan_new.html", form=form, error=str(exc))
+    with d.get_db() as db:
+        loan_id = loans.create_loan(
+            db, values["name"], values["lender"], values["currency"], values["principal"],
+            values["start_date"], values["tenure_months"], values["notes"], emi_amount, rate,
+        )
+    return RedirectResponse(f"/loans/{loan_id}", status_code=303)
+
+
+@app.get("/loans/{loan_id}")
+def loan_detail(request: Request, loan_id: int, error: str = ""):
+    today = date.today()
+    with d.get_db() as db:
+        loan = loans.get_loan(db, loan_id)
+        if loan is None:
+            return RedirectResponse("/loans", status_code=303)
+        data = loans.load(db, loan, today)
+    rows, s = data["rows"], data["summary"]
+
+    # Balance over time: solid for installments already due, dashed for the projection.
+    labels = [loans.parse_date(loan["start_date"]).strftime("%b %Y")]
+    values = [loan["principal"]]
+    paid_flags = [True]
+    for r in rows:
+        labels.append(r["due"].strftime("%b %Y"))
+        values.append(round(r["closing"], 2))
+        paid_flags.append(r["paid"])
+    last_paid = max((i for i, p in enumerate(paid_flags) if p), default=0)
+    chart = {
+        "labels": labels,
+        "paid": [v if i <= last_paid else None for i, v in enumerate(values)],
+        "projected": [v if i >= last_paid else None for i, v in enumerate(values)],
+        "yearly": [
+            {"year": y["year"], "principal": round(y["principal"], 2), "interest": round(y["interest"], 2)}
+            for y in loans.yearly(rows)
+        ],
+        "symbol": "₹" if loan["currency"] == "INR" else "€",
+    }
+    return _render(
+        request, "loan_detail.html", **data, chart_json=json.dumps(chart),
+        today=today, error=error or None,
+    )
+
+
+@app.post("/loans/{loan_id}/edit")
+def loan_edit(
+    loan_id: int, name: str = Form(""), lender: str = Form(""), currency: str = Form("EUR"),
+    principal: float = Form(0), start_date: str = Form(""), tenure_months: str = Form(""),
+    notes: str = Form(""),
+):
+    try:
+        v = _loan_values(name, lender, currency, principal, start_date, tenure_months, notes)
+    except ValueError as exc:
+        return RedirectResponse(f"/loans/{loan_id}?error={str(exc).replace(' ', '+')}", status_code=303)
+    with d.get_db() as db:
+        loans.update_loan(db, loan_id, v["name"], v["lender"], v["currency"], v["principal"],
+                          v["start_date"], v["tenure_months"], v["notes"])
+    return RedirectResponse(f"/loans/{loan_id}", status_code=303)
+
+
+@app.post("/loans/{loan_id}/delete")
+def loan_delete(loan_id: int):
+    with d.get_db() as db:
+        loans.delete_loan(db, loan_id)
+    return RedirectResponse("/loans", status_code=303)
+
+
+@app.post("/loans/{loan_id}/emi")
+def loan_emi_add(loan_id: int, start_date: str = Form(...), amount: float = Form(...)):
+    if _valid_date(start_date) and amount > 0:
+        with d.get_db() as db:
+            loans.set_emi(db, loan_id, start_date, amount)
+    return RedirectResponse(f"/loans/{loan_id}", status_code=303)
+
+
+@app.post("/loans/{loan_id}/emi/{emi_id}/delete")
+def loan_emi_delete(loan_id: int, emi_id: int):
+    with d.get_db() as db:
+        loans.delete_emi(db, loan_id, emi_id)
+    return RedirectResponse(f"/loans/{loan_id}", status_code=303)
+
+
+@app.post("/loans/{loan_id}/rate")
+def loan_rate_add(loan_id: int, start_date: str = Form(...), rate: float = Form(...)):
+    if _valid_date(start_date) and rate >= 0:
+        with d.get_db() as db:
+            loans.set_rate(db, loan_id, start_date, rate)
+    return RedirectResponse(f"/loans/{loan_id}", status_code=303)
+
+
+@app.post("/loans/{loan_id}/rate/{rate_id}/delete")
+def loan_rate_delete(loan_id: int, rate_id: int):
+    with d.get_db() as db:
+        loans.delete_rate(db, loan_id, rate_id)
+    return RedirectResponse(f"/loans/{loan_id}", status_code=303)
+
+
+@app.post("/loans/{loan_id}/prepay")
+def loan_prepay_add(loan_id: int, when: str = Form(..., alias="date"), amount: float = Form(...),
+                    note: str = Form("")):
+    if _valid_date(when) and amount > 0:
+        with d.get_db() as db:
+            loans.add_prepayment(db, loan_id, when, amount, note)
+    return RedirectResponse(f"/loans/{loan_id}", status_code=303)
+
+
+@app.post("/loans/{loan_id}/prepay/{prepay_id}/delete")
+def loan_prepay_delete(loan_id: int, prepay_id: int):
+    with d.get_db() as db:
+        loans.delete_prepayment(db, loan_id, prepay_id)
+    return RedirectResponse(f"/loans/{loan_id}", status_code=303)
 
 
 # ---------- excel import ----------

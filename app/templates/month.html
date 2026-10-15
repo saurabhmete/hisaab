@@ -34,6 +34,18 @@
 
 <div class="panel">
   <h2>2 &middot; Plan the month's expenses</h2>
+  {% if loan_emis %}
+  <div class="notice info" style="margin-top:0">
+    <span class="small">Loan EMIs due this month:</span>
+    <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.4rem">
+      {% for l in loan_emis %}
+      <button type="button" class="secondary emi-suggest" data-cat="{{ l.category }}" data-amt="{{ l.amount }}">
+        {{ 'Update' if l.replaces else '+ Add' }} {{ l.category }} &middot; &euro;{{ '%g' % l.amount }}
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
   <div class="editor-head"><span>Category</span><span style="text-align:right">Amount (&euro;)</span><span></span></div>
   <div class="editor-rows" id="rows">
     {% for it in items %}
@@ -105,6 +117,23 @@ function addRow() {
   rows.lastElementChild.querySelector('input').focus();
   recalc();
 }
+function applyEmi(cat, amt) {
+  const existing = [...rows.querySelectorAll('.editor-row')].find(
+    r => r.querySelector('input[name="category"]').value.trim().toLowerCase() === cat.toLowerCase());
+  if (existing) {
+    existing.querySelector('input[name="amount"]').value = amt;
+  } else {
+    addRow();
+    const last = rows.lastElementChild;
+    last.querySelector('input[name="category"]').value = cat;
+    last.querySelector('input[name="amount"]').value = amt;
+  }
+  recalc();
+}
+document.querySelectorAll('.emi-suggest').forEach(btn => btn.addEventListener('click', () => {
+  applyEmi(btn.dataset.cat, parseFloat(btn.dataset.amt));
+  btn.remove();
+}));
 function removeRow(btn) {
   btn.closest('.editor-row').remove();
   recalc();

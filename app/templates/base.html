@@ -18,6 +18,7 @@ try { if (localStorage.getItem('hisaab_privacy') === '1') document.body.classLis
     <a href="/" {% if request.url.path == '/' %}class="active"{% endif %}>Dashboard</a>
     <a href="/years" {% if request.url.path == '/years' or request.url.path.startswith('/year/') %}class="active"{% endif %}>Years</a>
     <a href="/investments" {% if request.url.path == '/investments' %}class="active"{% endif %}>Investments</a>
+    <a href="/loans" {% if request.url.path.startswith('/loans') %}class="active"{% endif %}>Loans</a>
     <a href="/import" {% if request.url.path == '/import' %}class="active"{% endif %}>Import</a>
     {% if user and user.is_admin %}
     <a href="/users" {% if request.url.path == '/users' %}class="active"{% endif %}>Users</a>

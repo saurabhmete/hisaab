@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Add loan · Hisaab{% endblock %}
+{% block content %}
+
+<div class="month-nav">
+  <a class="navarrow" href="/loans" title="All loans">&larr;</a>
+  <h1>Add a loan</h1>
+</div>
+
+{% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+
+<form method="post" action="/loans" class="panel loanform">
+  <h2>The loan</h2>
+  <div class="formgrid">
+    <label class="field">Name
+      <input name="name" value="{{ form.name or '' }}" placeholder="e.g. Home loan" required autofocus>
+    </label>
+    <label class="field"><span>Lender <span class="muted">(optional)</span></span>
+      <input name="lender" value="{{ form.lender or '' }}" placeholder="e.g. HDFC">
+    </label>
+    <label class="field">Currency
+      <select name="currency" id="currency">
+        <option value="EUR" {% if form.currency != 'INR' %}selected{% endif %}>EUR (€)</option>
+        <option value="INR" {% if form.currency == 'INR' %}selected{% endif %}>INR (₹)</option>
+      </select>
+    </label>
+    <label class="field">Loan amount
+      <input type="number" step="0.01" min="0" name="principal" id="principal" value="{{ form.principal or '' }}" required>
+    </label>
+    <label class="field">Start date
+      <input type="date" name="start_date" value="{{ form.start_date or '' }}" required>
+      <span class="muted hint">The first EMI falls one month after this date.</span>
+    </label>
+  </div>
+
+  <h2>Terms</h2>
+  <div class="formgrid three">
+    <label class="field">Interest rate (% per year)
+      <input type="number" step="0.001" min="0" name="rate" id="rate" value="{{ form.rate if form.rate != '' and form.rate is not none else '' }}" required>
+    </label>
+    <label class="field">Tenure (months)
+      <input type="number" step="1" min="1" name="tenure_months" id="tenure" value="{{ form.tenure_months or '' }}" placeholder="e.g. 240">
+      <span class="muted hint" id="tenurehint">12 months = 1 year</span>
+    </label>
+    <label class="field"><span>EMI per month <span class="muted">(optional)</span></span>
+      <input type="number" step="0.01" min="0" name="emi" id="emi" value="{{ form.emi or '' }}" placeholder="auto-calculated">
+      <span class="muted hint" id="emihint">Leave blank to calculate it from amount, rate and tenure.</span>
+    </label>
+  </div>
+
+  <label class="field" style="margin-top:0.9rem"><span>Notes <span class="muted">(optional)</span></span>
+    <input name="notes" value="{{ form.notes or '' }}" placeholder="account number, loan type, …">
+  </label>
+
+  <div style="margin-top:1.1rem; display:flex; gap:0.6rem; flex-wrap:wrap">
+    <button type="submit">Create loan</button>
+    <a class="btn secondary" href="/loans">Cancel</a>
+  </div>
+  <p class="muted small" style="margin-bottom:0">
+    This is the loan as originally sanctioned. If the EMI or rate changed later, add those
+    changes with their dates on the loan's page after creating it.
+  </p>
+</form>
+
+<script>
+const $ = id => document.getElementById(id);
+function preview() {
+  const p = parseFloat($('principal').value), r = parseFloat($('rate').value), n = parseInt($('tenure').value, 10);
+  const sym = $('currency').value === 'INR' ? '₹' : '€';
+  $('tenurehint').textContent = n > 0
+    ? `${n} months = ${Math.floor(n / 12)} yr${n % 12 ? ' ' + (n % 12) + ' mo' : ''}` : '12 months = 1 year';
+  if (p > 0 && r >= 0 && n > 0) {
+    const m = r / 1200;
+    const emi = m === 0 ? p / n : p * m * Math.pow(1 + m, n) / (Math.pow(1 + m, n) - 1);
+    $('emihint').textContent = `Calculated EMI ≈ ${sym}${emi.toLocaleString(undefined, {maximumFractionDigits: 2})} (used if left blank)`;
+  } else {
+    $('emihint').textContent = 'Leave blank to calculate it from amount, rate and tenure.';
+  }
+}
+['principal', 'rate', 'tenure', 'currency'].forEach(id => $(id).addEventListener('input', preview));
+preview();
+</script>
+
+{% endblock %}

@@ -241,6 +241,63 @@ code, kbd {
   background: var(--accent-soft); border-radius: 6px; padding: 0.1em 0.4em;
 }
 
+/* ---------- loans ---------- */
+
+.loancard { display: block; text-decoration: none; color: inherit; }
+.loancard .panel { transition: transform 120ms ease-out, border-color 120ms ease-out; }
+.loancard:hover .panel { border-color: var(--accent); }
+.loancard:active .panel { transform: scale(0.995); }
+.loancard-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+.loancard-head h2 { margin: 0; font-size: 1.15rem; }
+.loancard-stats {
+  display: flex; flex-wrap: wrap; gap: 0.6rem 2.2rem; margin: 0.8rem 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.badge {
+  display: inline-block; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.02em;
+  padding: 0.12rem 0.55rem; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent);
+}
+.badge.good { background: rgba(27, 175, 122, 0.14); color: var(--good); }
+
+.progress { height: 8px; border-radius: 999px; background: var(--grid); overflow: hidden; }
+.progress > span {
+  display: block; height: 100%; border-radius: 999px; background: var(--accent-3);
+  transition: width 300ms ease-out;
+}
+.progress.big { height: 12px; margin-bottom: 1rem; }
+
+.cards.six { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 560px) { .cards.six { grid-template-columns: repeat(2, 1fr); } }
+.periods th:nth-child(2), .periods td:nth-child(2) { text-align: left; }
+
+.kv { display: flex; flex-wrap: wrap; gap: 0.8rem 2.5rem; font-variant-numeric: tabular-nums; }
+
+.formgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.9rem; }
+.formgrid.three { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 640px) { .formgrid.three { grid-template-columns: 1fr; } }
+.formgrid input, .formgrid select { width: 100%; }
+.hint { font-size: 0.75rem; }
+.loanform h2 { margin-top: 1.2rem; }
+.loanform h2:first-child { margin-top: 0; }
+
+details.panel > summary {
+  cursor: pointer; font-weight: 650; letter-spacing: -0.01em; list-style: none;
+}
+details.panel > summary::-webkit-details-marker { display: none; }
+details.panel > summary::before {
+  content: "▸"; display: inline-block; margin-right: 0.5rem; color: var(--muted);
+  transition: transform 120ms ease-out;
+}
+details.panel[open] > summary::before { transform: rotate(90deg); }
+
+tr.current td { font-weight: 650; }
+tr.current td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.schedule td, .schedule th { white-space: nowrap; }
+.schedule tr.paidrow td { color: var(--muted); }
+.schedule tr.nextrow td { background: var(--accent-soft); font-weight: 600; }
+
 /* ---------- small screens ---------- */
 
 @media (max-width: 480px) {

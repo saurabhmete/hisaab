@@ -51,6 +51,42 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS loans (
+    id            INTEGER PRIMARY KEY,
+    name          TEXT NOT NULL,
+    lender        TEXT NOT NULL DEFAULT '',
+    currency      TEXT NOT NULL DEFAULT 'EUR' CHECK (currency IN ('EUR', 'INR')),
+    principal     REAL NOT NULL CHECK (principal > 0),
+    start_date    TEXT NOT NULL,
+    tenure_months INTEGER,
+    notes         TEXT NOT NULL DEFAULT '',
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS loan_emis (
+    id         INTEGER PRIMARY KEY,
+    loan_id    INTEGER NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
+    start_date TEXT NOT NULL,
+    amount     REAL NOT NULL CHECK (amount > 0),
+    UNIQUE (loan_id, start_date)
+);
+
+CREATE TABLE IF NOT EXISTS loan_rates (
+    id         INTEGER PRIMARY KEY,
+    loan_id    INTEGER NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
+    start_date TEXT NOT NULL,
+    rate       REAL NOT NULL CHECK (rate >= 0),
+    UNIQUE (loan_id, start_date)
+);
+
+CREATE TABLE IF NOT EXISTS loan_prepayments (
+    id      INTEGER PRIMARY KEY,
+    loan_id INTEGER NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
+    date    TEXT NOT NULL,
+    amount  REAL NOT NULL CHECK (amount > 0),
+    note    TEXT NOT NULL DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS login_failures (
     id INTEGER PRIMARY KEY,
     ip TEXT NOT NULL,
