@@ -258,6 +258,13 @@ def test_prompt_mentions_today_and_the_file_format():
     assert "{" in prompt and "{example}" not in prompt and "{today}" not in prompt
 
 
+def test_prompt_makes_claude_ask_before_guessing_and_adapt_to_any_lender():
+    prompt = I.build_prompt(date(2026, 10, 15))
+    assert "ASK ME" in prompt and "wait for my answers" in prompt
+    assert "Never guess" in prompt
+    assert "lays its documents out differently" in prompt
+
+
 def test_the_example_inside_the_prompt_is_itself_a_valid_import():
     r = I.parse(json.dumps(I.EXAMPLE), TODAY_IMPORT)
     assert r["ok"], r["errors"]
@@ -385,6 +392,104 @@ def test_creating_an_imported_loan_stores_every_part_and_loads_back():
     assert [e["value"] for e in loaded["emi_timeline"]] == [100, 2000]
     assert loaded["summary"]["has_statement"] and loaded["summary"]["statement_until"] == date(2025, 5, 10)
     assert sum(1 for r in loaded["rows"] if r["recorded"]) == 5
+
+
+# ---------- paying a loan off early ----------
+
+def _plain_loan(db=None):
+    """100000 at 12% over 12 months, started 2025-01-10 (monthly rate exactly 1%)."""
+    db = db or sqlite3.connect(":memory:")
+    db.row_factory = sqlite3.Row
+    db.executescript(D.SCHEMA)
+    emi = round(L.calc_emi(100_000, 12.0, 12), 2)
+    L.create_loan(db, "Plain", "", "EUR", 100_000, "2025-01-10", 12, "", emi, 12.0)
+    return db
+
+
+def _closing(db, on, charge=0.0, today=date(2025, 1, 11)):
+    data = L.load(db, L.get_loan(db, 1), today)
+    return data, L.foreclosure(data["loan"], data["rows"], data["rate_timeline"],
+                               data["prepayments"], on, charge)
+
+
+def test_closing_on_an_emi_date_equals_that_emi_plus_the_balance_after_it():
+    data, c = _closing(_plain_loan(), date(2025, 6, 10))
+    row = next(r for r in data["rows"] if r["due"] == date(2025, 6, 10))
+    assert c["on_due_date"]
+    assert abs(c["total"] - (row["emi"] + row["closing"])) < 0.01
+    assert abs(c["principal"] - row["opening"]) < 0.01
+    assert abs(c["interest"] - row["interest"]) < 0.01
+
+
+def test_closing_mid_month_charges_interest_only_for_the_days_elapsed():
+    data, c = _closing(_plain_loan(), date(2025, 6, 25))        # 15 days after the 10 June installment
+    june = next(r for r in data["rows"] if r["due"] == date(2025, 6, 10))
+    assert abs(c["principal"] - june["closing"]) < 0.01
+    assert c["days"] == 15 and c["period_days"] == 30
+    assert abs(c["interest"] - june["closing"] * 0.01 * 15 / 30) < 0.01
+    assert not c["on_due_date"] and c["emis_before"] == 5
+
+
+def test_closing_a_day_after_an_emi_costs_almost_just_the_balance():
+    data, c = _closing(_plain_loan(), date(2025, 6, 11))
+    june = next(r for r in data["rows"] if r["due"] == date(2025, 6, 10))
+    assert abs(c["total"] - june["closing"]) < june["closing"] * 0.01 / 30 + 0.01
+
+
+def test_closing_adds_the_foreclosure_charge_on_the_principal_only():
+    _, plain = _closing(_plain_loan(), date(2025, 6, 25))
+    _, charged = _closing(_plain_loan(), date(2025, 6, 25), charge=2.0)
+    assert abs(charged["charge"] - plain["principal"] * 0.02) < 0.01
+    assert abs(charged["total"] - plain["total"] - charged["charge"]) < 0.01
+
+
+def test_closing_after_the_loan_would_already_be_repaid_is_nothing_to_pay():
+    _, c = _closing(_plain_loan(), date(2030, 1, 1))
+    assert c["closed"] and c["total"] == 0
+
+
+def test_closing_before_the_loan_started_is_rejected():
+    try:
+        _closing(_plain_loan(), date(2024, 12, 1))
+    except ValueError as exc:
+        assert "before the loan started" in str(exc)
+        return
+    raise AssertionError("expected ValueError")
+
+
+def test_closing_accounts_for_a_prepayment_made_earlier_in_the_same_month():
+    db = _plain_loan()
+    L.add_prepayment(db, 1, "2025-06-15", 10_000, "")
+    data, c = _closing(db, date(2025, 6, 25))
+    june = next(r for r in data["rows"] if r["due"] == date(2025, 6, 10))   # the period starts here
+    assert abs(c["principal"] - (june["closing"] - 10_000)) < 0.01
+    # 5 days at the old balance (10 -> 15 June), then 10 days at the reduced one (15 -> 25 June), of a 30-day month
+    expected = june["closing"] * 0.01 * 5 / 30 + (june["closing"] - 10_000) * 0.01 * 10 / 30
+    assert abs(c["interest"] - expected) < 0.01
+
+
+def test_closing_a_statement_loan_starts_from_the_recorded_balance_and_refuses_earlier_dates():
+    data = _parse(_part_payment_loan())["data"]
+    db = sqlite3.connect(":memory:")
+    db.row_factory = sqlite3.Row
+    db.executescript(D.SCHEMA)
+    loan_id = I.create(db, data)
+    loaded = L.load(db, L.get_loan(db, loan_id), date(2025, 5, 20))
+    try:
+        L.foreclosure(loaded["loan"], loaded["rows"], loaded["rate_timeline"], [], date(2025, 4, 10))
+    except ValueError as exc:
+        assert "statement" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
+    c = L.foreclosure(loaded["loan"], loaded["rows"], loaded["rate_timeline"], [], date(2025, 6, 10))
+    assert abs(c["principal"] - 120690) < 0.01 and c["on_due_date"]
+    assert abs(c["interest"] - 120690 * 10 / 1200) < 0.01
+
+
+def test_closing_early_saves_the_interest_of_every_later_installment():
+    data, c = _closing(_plain_loan(), date(2025, 6, 10))
+    later = sum(r["interest"] for r in data["rows"] if r["due"] > date(2025, 6, 10))
+    assert abs(c["interest_saved"] - later) < 0.01
 
 
 if __name__ == "__main__":

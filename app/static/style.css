@@ -204,6 +204,9 @@ button.danger:hover { background: var(--grid); filter: none; }
 .ledger-row .quickfill { display: inline-flex; gap: 0.4rem; margin-left: 0.5rem; }
 .ledger-row .quickfill button { padding: 0.25rem 0.65rem; font-size: 0.8rem; font-weight: 500; }
 
+#close { scroll-margin-top: 4.5rem; }
+.bigamount { font-size: 2.1rem; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+
 /* ---------- notices ---------- */
 
 .notice {

@@ -40,10 +40,14 @@ keep one's accounts.
   total interest over the loan, a balance-over-time chart, principal-vs-interest
   per year, support for part-payments (prepayments), and the full amortization
   schedule. EMIs of euro loans can be added to a month's plan with one click.
+  **Paying it off early?** Pick a date on the loan's page and see exactly what
+  clears it that day: outstanding principal, interest accrued since the last EMI,
+  and an optional foreclosure charge, plus the interest you'd avoid.
   **Already paying a loan for years?** *Loans → Import running loan* gives you a
   prompt to paste into Claude along with your lender's repayment schedule and
   rate-change table. Claude returns a JSON file; upload it, review the summary,
-  and Hisaab keeps the lender's real past installments exactly as recorded
+  (Claude is told to ask you about anything missing or unclear, since every lender's
+  documents look different) and Hisaab keeps the lender's real past installments exactly as recorded
   (including unpaid interest that was later added to the principal, such as after
   a part-payment period) and projects the rest from the last one.
   The maths is covered by tests (`python -m tests.test_loans`).

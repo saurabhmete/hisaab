@@ -191,6 +191,61 @@ def summarize(loan, rows, emis, rates, prepayments, today):
     }
 
 
+def foreclosure(loan, rows, rate_timeline, prepayments, on, charge_pct=0.0):
+    """What it takes to pay the loan off completely on date `on`.
+
+    Every installment due before `on` is assumed paid on schedule. The payoff is
+    the principal still outstanding that day, plus the interest accrued since
+    the last installment (days elapsed / days in the month, the same convention
+    used for prepayments), plus an optional foreclosure charge on the principal.
+    An installment falling due exactly on `on` is part of the payoff, not
+    paid on top of it.
+    """
+    start = parse_date(loan["start_date"])
+    if on < start:
+        raise ValueError("That date is before the loan started.")
+    recorded_until = max((r["due"] for r in rows if r["recorded"]), default=None)
+    if recorded_until is not None and on <= recorded_until:
+        raise ValueError(
+            f"Pick a date after {recorded_until.isoformat()}: installments up to then are "
+            "fixed by your lender's statement.")
+
+    before = [r for r in rows if r["due"] < on]
+    after = [r for r in rows if r["due"] >= on]
+    if not after:
+        return {"on": on, "closed": True, "total": 0.0, "principal": 0.0, "interest": 0.0,
+                "charge": 0.0, "charge_pct": charge_pct, "emis_before": len(before)}
+
+    prev_due = before[-1]["due"] if before else start
+    balance = before[-1]["closing"] if before else float(loan["principal"])
+    nxt = after[0]
+    period_days = (nxt["due"] - prev_due).days
+    rates = sorted((parse_date(r["start"]), r["value"]) for r in rate_timeline)
+    monthly_rate = _in_force(rates, on) / 1200
+
+    seg_balance, seg_from, interest = balance, prev_due, 0.0
+    extra_paid = 0.0
+    for when, amount in sorted((parse_date(p["date"]), p["amount"]) for p in prepayments):
+        if not prev_due < when <= on:
+            continue
+        amount = min(amount, seg_balance)
+        interest += seg_balance * monthly_rate * (when - seg_from).days / period_days
+        seg_balance -= amount
+        extra_paid += amount
+        seg_from = when
+    interest += seg_balance * monthly_rate * (on - seg_from).days / period_days
+
+    charge = seg_balance * charge_pct / 100
+    interest_saved = sum(r["interest"] for r in after[1:]) + max(0.0, nxt["interest"] - interest)
+    return {
+        "on": on, "closed": False, "principal": seg_balance, "interest": interest,
+        "charge": charge, "charge_pct": charge_pct, "total": seg_balance + interest + charge,
+        "since": prev_due, "days": (on - prev_due).days, "period_days": period_days,
+        "on_due_date": on == nxt["due"], "emis_before": len(before),
+        "interest_saved": interest_saved, "rate": _in_force(rates, on),
+    }
+
+
 def yearly(rows):
     """Principal vs interest per calendar year, for the chart."""
     years = {}

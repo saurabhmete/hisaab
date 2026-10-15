@@ -634,7 +634,8 @@ def loan_create(
 
 
 @app.get("/loans/{loan_id}")
-def loan_detail(request: Request, loan_id: int, error: str = ""):
+def loan_detail(request: Request, loan_id: int, error: str = "",
+                close_on: str = "", close_charge: float = 0.0):
     today = date.today()
     with d.get_db() as db:
         loan = loans.get_loan(db, loan_id)
@@ -662,9 +663,22 @@ def loan_detail(request: Request, loan_id: int, error: str = ""):
         ],
         "symbol": loans.CURRENCIES.get(loan["currency"], loan["currency"] + " "),
     }
+    closing, closing_error = None, None
+    if close_on:
+        try:
+            when = date.fromisoformat(close_on)
+            if not 0 <= close_charge <= 25:
+                raise ValueError("The foreclosure charge should be between 0% and 25%.")
+            closing = loans.foreclosure(data["loan"], rows, data["rate_timeline"],
+                                        data["prepayments"], when, close_charge)
+        except ValueError as exc:
+            closing_error = ("That isn't a valid date." if "isoformat" in str(exc) or "Invalid isoformat" in str(exc)
+                             else str(exc))
+    default_close = (s["next"]["due"] if s["next"] else today).isoformat()
     return _render(
         request, "loan_detail.html", **data, chart_json=json.dumps(chart),
-        today=today, error=error or None,
+        today=today, error=error or None, closing=closing, closing_error=closing_error,
+        close_on=close_on or default_close, close_charge=close_charge,
     )
 
 

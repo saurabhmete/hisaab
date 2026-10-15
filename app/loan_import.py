@@ -24,12 +24,26 @@ I'm moving an existing loan into Hisaab, my personal finance tracker. I've attac
 
 Today's date is {today}.
 
-HOW TO DELIVER
+HOW WE'LL WORK
+Step 1: read first, then ask me. Every lender lays its documents out differently: different column names, date formats, number formats (such as 12,00,000), interest shown in one column or split across several, part-payment or interest-only phases, floating rates, and so on. Read everything, tell me briefly what you found, and ASK ME about anything you can't determine with confidence before you write the file. Put all your questions in ONE numbered message and wait for my answers. Things worth asking about:
+  - what a column means, when it isn't obvious (principal vs interest vs total installment vs balance);
+  - the date format, if it is ambiguous;
+  - the lender's name and what I want the loan called;
+  - the amount actually disbursed, and the original tenure;
+  - whether the rate is floating, and whether the rate-change table is complete and up to date;
+  - whether there was a part-payment, interest-only or moratorium period, and what happened to the interest that went unpaid;
+  - any extra payments or part-prepayments I made that these documents don't show;
+  - whether a newer statement exists than the one I attached, if the latest rows look old;
+  - anything that is unreadable, missing or contradicts another document.
+If the documents already answer everything, say so and go straight to the file.
+Step 2: once I've answered, create the file.
+
+HOW TO DELIVER THE FILE
 - Create a downloadable file named loan-import.json containing only the JSON object. If you can't create files, give me the JSON in a single code block instead.
-- After the JSON, list every assumption you made and anything that looked doubtful or missing, so I can check it.
+- After the JSON, list every assumption you made so I can check it.
 
 RULES
-1. Never invent numbers. If something isn't in the documents, use null and tell me what is missing. If two documents disagree, tell me instead of guessing.
+1. Never guess or invent numbers. If a value is not in the documents, ask me for it. Use null only for optional values (loan.lender, loan.tenure_months) that I've told you I don't know. If two documents disagree, ask me which one is right.
 2. Dates must be ISO: YYYY-MM-DD. Documents often show DD/MM/YY (for example 11/10/26 is 11 October 2026). If a date is ambiguous, work out the format from context (such as the same day-of-month repeating on every row) and tell me what you decided.
 3. Amounts are plain numbers: no currency symbols, no thousands separators, no quotes.
 4. Do not include my name, address, phone number or any personal identifiers. The loan account number may go into "notes".
