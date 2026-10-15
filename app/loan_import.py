@@ -106,7 +106,7 @@ def build_prompt(today: date) -> str:
 
 # ---------- parsing ----------
 
-def _extract_json(text: str):
+def extract_json(text: str):
     """Accept a bare file, a ```json fenced block, or a whole chat reply that
     contains one JSON object. Returns (obj, error)."""
     text = (text or "").strip().lstrip("﻿")
@@ -127,7 +127,7 @@ def _extract_json(text: str):
     return None, f"This isn't valid JSON ({last_error.msg} at line {last_error.lineno}, column {last_error.colno})."
 
 
-class _Check:
+class Check:
     """Collects problems so the user sees all of them at once."""
 
     def __init__(self):
@@ -184,11 +184,11 @@ def _money(value, currency):
 def parse(text: str, today: date) -> dict:
     """Validate an import file. Returns {"ok", "errors", "warnings", "info",
     "data", "preview"}; `data` is only set when there are no errors."""
-    check = _Check()
+    check = Check()
     result = {"ok": False, "errors": check.errors, "warnings": check.warnings,
               "info": check.info, "data": None, "preview": None}
 
-    raw, problem = _extract_json(text)
+    raw, problem = extract_json(text)
     if problem:
         check.error(problem)
         return result

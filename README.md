@@ -58,6 +58,14 @@ keep one's accounts.
 - **Excel import** — upload the original "Salary Plan" workbook on the *Import*
   page (or `python import_excel.py file.xlsx`) to seed the database. After that
   the site is the source of truth; import stays available as an option.
+- **Import from any other format** — records in bank statements, a differently
+  laid-out spreadsheet or another app's export? The *Import* page gives you a
+  prompt to paste into Claude along with those files. Claude asks about anything
+  unclear (what counts as salary, which payments are investments, how to group
+  spending), then produces a JSON file with your months, expenses and investment
+  snapshots. Hisaab reuses your existing category names, shows a review of what
+  would be added or replaced, and only saves when you confirm. Existing months are
+  updated, never emptied.
 - **Users & login** — on first launch the app asks you to create an **admin**
   account. The setup page is protected by a one-time token printed in the server
   log (`docker compose logs hisaab`) — open the `/setup?token=…` link it shows,

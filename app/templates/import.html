@@ -2,7 +2,11 @@
 {% block title %}Import · Hisaab{% endblock %}
 {% block content %}
 
-<h1>Import from Excel</h1>
+<h1>Import your data</h1>
+<p class="muted" style="margin-top:0">
+  Everything can also be entered directly on the site, so importing is optional. Pick the
+  option that matches how your records look.
+</p>
 
 {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
 {% if report %}
@@ -16,8 +20,16 @@
   <p class="small" style="margin-bottom:0"><a href="/">Go to the dashboard</a></p>
 </div>
 {% endif %}
+{% if result and result.errors %}
+<div class="notice error">
+  <strong>This file can't be imported yet:</strong>
+  <ul style="margin:0.3rem 0 0">{% for e in result.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+  <p class="small" style="margin-bottom:0">Tell Claude what the errors say and ask it to fix the file, then upload the new one.</p>
+</div>
+{% endif %}
 
 <div class="panel">
+  <h2>A &middot; I have the Salary Plan spreadsheet</h2>
   <form class="inline" method="post" action="/import" enctype="multipart/form-data">
     <label class="field">Workbook (.xlsx)
       <input type="file" name="file" accept=".xlsx" required>
@@ -25,13 +37,51 @@
     <button type="submit">Import</button>
   </form>
   <p class="small muted" style="margin-bottom:0">
-    Months that already exist are overwritten with the workbook's values. Importing is
-    optional — everything can also be entered directly on the site.
+    Months that already exist are overwritten with the workbook's values. The layout it expects is
+    described <a href="#excel-format">further down</a>.
   </p>
 </div>
 
-<div class="panel format-doc">
-  <h2>Expected workbook format</h2>
+<div class="panel" id="assisted">
+  <h2>B &middot; My records are in some other form</h2>
+  <p class="muted small" style="margin-top:0">
+    Bank or card statements, a spreadsheet laid out differently, another app's export, even notes:
+    give them to Claude together with the prompt below and it converts them into a file Hisaab can read.
+  </p>
+
+  <h2 class="small" style="margin-bottom:0.3rem">1 &middot; Copy the prompt</h2>
+  <textarea id="prompt" class="promptbox" readonly rows="8" aria-label="Prompt for Claude">{{ prompt }}</textarea>
+  <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.6rem">
+    <button type="button" id="copybtn">Copy prompt</button>
+    <button type="button" class="secondary" id="dlbtn">Download as .txt</button>
+    <span class="muted small" id="copied" style="align-self:center"></span>
+  </div>
+  <p class="muted small" style="margin-bottom:0">It already lists your current expense categories, so Claude reuses them instead of inventing near-duplicates.</p>
+
+  <h2 class="small" style="margin-bottom:0.3rem">2 &middot; Ask Claude</h2>
+  <ol class="steps small">
+    <li>Open a new chat in <strong>Claude</strong> and paste the prompt.</li>
+    <li>Attach your records (PDFs, spreadsheets, CSV or screenshots).</li>
+    <li>Claude will ask you a few questions first, such as what counts as salary or which payments are investments. Answer them; that's what makes the file accurate.</li>
+    <li>Download the <code>hisaab-data.json</code> it gives you, or copy the JSON if it shows a code block.</li>
+  </ol>
+  <p class="muted small" style="margin-top:0">The prompt tells Claude to leave your name, address and account numbers out of the file.</p>
+
+  <h2 class="small" style="margin-bottom:0.3rem">3 &middot; Upload the file</h2>
+  <form method="post" action="/import/assisted" enctype="multipart/form-data">
+    <label class="field">File from Claude <span class="muted">(.json)</span>
+      <input type="file" name="file" accept=".json,.txt,application/json,text/plain">
+    </label>
+    <p class="muted small" style="margin:0.8rem 0 0.4rem">&hellip;or paste what Claude gave you:</p>
+    <textarea name="pasted" class="promptbox" rows="4" placeholder='{ "format": "hisaab-data-import", … }'>{{ pasted }}</textarea>
+    <div style="margin-top:0.8rem"><button type="submit">Check the file</button></div>
+  </form>
+  <p class="muted small" style="margin-bottom:0">Nothing is saved yet &mdash; you'll see exactly what would change first.
+    Got a loan to bring in? That has its own importer under <a href="/loans/import">Loans</a>.</p>
+</div>
+
+<details class="panel format-doc" id="excel-format">
+  <summary>Expected Excel layout for option A</summary>
 
   <h2 class="small" style="margin-bottom:0.3rem">1 &middot; Year sheets — one per year, named after the year (e.g. <code>2026</code>)</h2>
   <ul class="small">
@@ -72,6 +122,25 @@
       <tr><td>India EUR to INR rate (Rupees)</td><td>110.016</td><td>110.016</td><td>…</td></tr>
     </tbody>
   </table></div>
-</div>
+</details>
+
+<script>
+const box = document.getElementById('prompt');
+const note = document.getElementById('copied');
+document.getElementById('copybtn').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(box.value); }
+  catch (e) { box.select(); document.execCommand('copy'); }
+  note.textContent = 'Copied.';
+  setTimeout(() => note.textContent = '', 2500);
+});
+document.getElementById('dlbtn').addEventListener('click', () => {
+  const url = URL.createObjectURL(new Blob([box.value], {type: 'text/plain'}));
+  const a = Object.assign(document.createElement('a'), {href: url, download: 'hisaab-data-import-prompt.txt'});
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+});
+if (location.hash === '#excel-format') document.getElementById('excel-format').open = true;
+document.querySelectorAll('a[href="#excel-format"]').forEach(a =>
+  a.addEventListener('click', () => document.getElementById('excel-format').open = true));
+</script>
 
 {% endblock %}

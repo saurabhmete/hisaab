@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from . import data_import
 from . import database as d
 from . import importer
 from . import loan_import
@@ -558,6 +559,16 @@ def loan_new(request: Request):
 MAX_IMPORT_BYTES = 1_000_000
 
 
+async def _upload_text(file, pasted):
+    """Text of an uploaded file (preferred) or pasted box; None if the file is too big."""
+    if file is not None and file.filename:
+        content = await file.read(MAX_IMPORT_BYTES + 1)
+        if len(content) > MAX_IMPORT_BYTES:
+            return None
+        return content.decode("utf-8-sig", errors="replace")
+    return pasted
+
+
 def _import_page(request, result=None, pasted=""):
     return _render(request, "loan_import.html", prompt=loan_import.build_prompt(date.today()),
                    result=result, pasted=pasted)
@@ -572,14 +583,11 @@ def loan_import_page(request: Request):
 async def loan_import_check(request: Request, file: UploadFile | None = File(None),
                             pasted: str = Form("")):
     """Step 1 of 2: validate the file and show what would be created. Saves nothing."""
-    text = pasted
-    if file is not None and file.filename:
-        content = await file.read(MAX_IMPORT_BYTES + 1)
-        if len(content) > MAX_IMPORT_BYTES:
-            result = {"ok": False, "errors": ["That file is too large to be a loan import."],
-                      "warnings": [], "info": []}
-            return _import_page(request, result)
-        text = content.decode("utf-8-sig", errors="replace")
+    text = await _upload_text(file, pasted)
+    if text is None:
+        result = {"ok": False, "errors": ["That file is too large to be a loan import."],
+                  "warnings": [], "info": []}
+        return _import_page(request, result)
     result = loan_import.parse(text, date.today())
     if not result["ok"]:
         return _import_page(request, result, pasted=text if len(text) < 200_000 else "")
@@ -774,9 +782,20 @@ def loan_prepay_delete(loan_id: int, prepay_id: int):
 
 # ---------- excel import ----------
 
+def _known_categories(db):
+    return [r["category"] for r in db.execute("SELECT DISTINCT category FROM expenses ORDER BY category")]
+
+
+def _import_data_page(request, report=None, error=None, result=None, pasted=""):
+    with d.get_db() as db:
+        categories = _known_categories(db)
+    return _render(request, "import.html", report=report, error=error, result=result, pasted=pasted,
+                   prompt=data_import.build_prompt(date.today(), categories))
+
+
 @app.get("/import")
 def import_page(request: Request):
-    return _render(request, "import.html", report=None, error=None)
+    return _import_data_page(request)
 
 
 @app.post("/import")
@@ -788,4 +807,34 @@ async def import_excel(request: Request, file: UploadFile):
             report = importer.import_workbook(db, io.BytesIO(content))
     except Exception as exc:  # surface the reason in the UI, keep the app up
         error = f"Import failed: {exc}"
-    return _render(request, "import.html", report=report, error=error)
+    return _import_data_page(request, report=report, error=error)
+
+
+@app.post("/import/assisted")
+async def import_assisted_check(request: Request, file: UploadFile | None = File(None),
+                                pasted: str = Form("")):
+    """Step 1 of 2: validate a Claude-made file and show what would change. Saves nothing."""
+    text = await _upload_text(file, pasted)
+    if text is None:
+        result = {"ok": False, "errors": ["That file is too large to be a data import."],
+                  "warnings": [], "info": []}
+        return _import_data_page(request, result=result)
+    with d.get_db() as db:
+        result = data_import.parse(text, date.today(), _known_categories(db))
+        if not result["ok"]:
+            return _import_data_page(request, result=result,
+                                     pasted=text if len(text) < 200_000 else "")
+        change = data_import.describe(db, result["data"])
+    result["warnings"] += change["notes"]
+    return _render(request, "data_import_preview.html", result=result, change=change, payload=text)
+
+
+@app.post("/import/assisted/confirm")
+def import_assisted_confirm(request: Request, payload: str = Form(...)):
+    """Step 2 of 2: re-validate the same text and store it."""
+    with d.get_db() as db:
+        result = data_import.parse(payload, date.today(), _known_categories(db))
+        if not result["ok"]:
+            return _import_data_page(request, result=result, pasted=payload)
+        report = data_import.create(db, result["data"])
+    return _import_data_page(request, report=report)
