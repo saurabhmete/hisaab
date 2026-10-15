@@ -73,11 +73,16 @@ keep one's accounts.
   `HISAAB_SETUP_TOKEN` to choose the token yourself; a random one is generated
   per start otherwise.) Admins can add and remove users on the *Users* page (e.g. add your
   partner as a regular member); members can't manage users, and the last admin
-  can never be deleted. Everyone shares the same household data.
+  can never be deleted. **Every person has their own private data**: months,
+  expenses, investments and loans are stored in a separate database file per
+  account, chosen from who is logged in, so one person (admins included) can
+  never see another's money. A new account starts empty; removing an account
+  permanently deletes its data. The first account keeps the original data.
   Prefer no login wall at all (Tailscale already limits who can reach the Pi)?
   Set `HISAAB_AUTH=off` in the environment.
-- **No cloud** — a single SQLite file (`data/hisaab.db`) on your own
-  hardware. Chart.js is vendored, so it works fully offline.
+- **No cloud** — SQLite files in `data/` on your own hardware: `hisaab.db`
+  (the accounts, plus the first account's data) and one `data/users/<id>.db`
+  per additional account. Chart.js is vendored, so it works fully offline.
 
 ## Run locally
 
@@ -123,11 +128,12 @@ passwords, and never set `HISAAB_AUTH=off` on a funneled deployment.
 
 ## Backups
 
-The whole state is one file. A nightly cron on the Pi is enough:
+The state is `data/hisaab.db` plus one file per extra account in `data/users/`.
+A nightly cron on the Pi backs up all of them:
 
 ```sh
 # crontab -e
-0 3 * * * sqlite3 /path/to/hisaab/data/hisaab.db ".backup /path/to/backups/hisaab-$(date +\%a).db"
+0 3 * * * for f in $HOME/hisaab/data/hisaab.db $HOME/hisaab/data/users/*.db; do [ -f "$f" ] && sqlite3 "$f" ".backup $HOME/backups/$(basename "$f" .db)-$(date +\%a).db"; done
 ```
 
 ## Privacy

@@ -204,8 +204,8 @@ def test_old_two_currency_check_is_rebuilt_without_losing_loans():
     raw.close()
     saved, D.DB_PATH = D.DB_PATH, path
     try:
-        D._drop_loan_currency_check()
-        D._drop_loan_currency_check()          # idempotent
+        D._drop_loan_currency_check(path)
+        D._drop_loan_currency_check(path)          # idempotent
         db = sqlite3.connect(path)
         db.execute("PRAGMA foreign_keys = ON")
         assert db.execute("SELECT name, currency FROM loans").fetchall() == [("Old loan", "INR")]

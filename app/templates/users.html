@@ -3,7 +3,7 @@
 {% block content %}
 
 <div class="page-head">
-  <div><h1>Users</h1><p class="sub">Everyone shares the same household data. Only admins can manage users, and the last admin can never be deleted.</p></div>
+  <div><h1>Users</h1><p class="sub">Everyone has their own private data. Admins can add and remove people, but cannot see anyone else's money.</p></div>
 </div>
 
 <div class="stack">
@@ -21,8 +21,8 @@
         <td class="tl">{% if u.is_admin %}<span class="badge">Admin</span>{% else %}<span class="badge mute">Member</span>{% endif %}</td>
         <td class="muted small">{{ u.created_at[:10] }}</td>
         <td style="width:1%">
-          {% if u.id != user.id %}
-          <form method="post" action="/users/{{ u.id }}/delete" onsubmit="return confirm('Remove {{ u.username }}? They will no longer be able to log in.')">
+          {% if u.id != user.id and u.id != owner_id %}
+          <form method="post" action="/users/{{ u.id }}/delete" onsubmit="return confirm('Remove {{ u.username }}? They can no longer log in, and all of their data is permanently deleted.')">
             <button class="btn btn-ghost btn-icon btn-sm" type="submit" title="Remove user" aria-label="Remove {{ u.username }}">{{ icon('trash', 16) }}</button>
           </form>
           {% endif %}
@@ -34,7 +34,7 @@
 </section>
 
 <section class="card">
-  <div class="card-head"><div><h2>Add a user</h2><div class="sub">They log in with this username and password.</div></div></div>
+  <div class="card-head"><div><h2>Add a user</h2><div class="sub">They log in with this username and password and start with an empty, private account.</div></div></div>
   <form class="form-row" method="post" action="/users">
     <label class="field">Username <input name="username" autocomplete="off" required></label>
     <label class="field">Password <span class="hint">at least 8 characters</span>

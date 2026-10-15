@@ -78,7 +78,7 @@ def _assert_pages(port, paths):
 
 
 def _seed():
-    with D.get_db() as db:
+    with D.get_db(D.DB_PATH) as db:
         for m in (1, 2, 3):
             mid = D.upsert_month(db, 2026, m, salary=3000, invested=500)
             for cat, amount in {"Rent": 900, "Groceries": 300 + m, "Gym": 30}.items():

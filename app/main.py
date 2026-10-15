@@ -70,17 +70,21 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # decides who can reach the app). Everyone is then the admin.
         if os.environ.get("HISAAB_AUTH", "on").lower() == "off":
             request.state.user = {"id": 0, "username": "tailnet", "is_admin": 1}
+            d.set_data_path(d.DB_PATH)
             return await call_next(request)
         path = request.url.path
         if any(path == p or path.startswith(p + "/") or path.startswith("/static") for p in PUBLIC_PATHS):
             return await call_next(request)
-        with d.get_db() as db:
+        with d.get_auth_db() as db:
             if d.user_count(db) == 0:
                 return RedirectResponse("/setup", status_code=303)
             user = d.session_user(db, request.cookies.get(SESSION_COOKIE, ""))
+            data_path = d.data_path_for(db, user["id"]) if user else None
         if user is None:
             return RedirectResponse("/login", status_code=303)
         request.state.user = dict(user)
+        # From here on, every data query in this request opens this person's own file.
+        d.set_data_path(data_path)
         return await call_next(request)
 
 
@@ -90,7 +94,7 @@ app.add_middleware(AuthMiddleware)
 @app.on_event("startup")
 def startup():
     d.init_db()
-    with d.get_db() as db:
+    with d.get_auth_db() as db:
         if d.user_count(db) == 0:
             print(
                 "\n"
@@ -127,7 +131,7 @@ def _next_open_month(db):
 
 @app.get("/setup")
 def setup_page(request: Request, token: str = ""):
-    with d.get_db() as db:
+    with d.get_auth_db() as db:
         if d.user_count(db) > 0:
             return RedirectResponse("/login", status_code=303)
     if not _setup_token_ok(token):
@@ -158,7 +162,7 @@ def setup_submit(request: Request, username: str = Form(...), password: str = Fo
             "setup.html",
             {"request": request, "locked": False, "error": error, "token": token},
         )
-    with d.get_db() as db:
+    with d.get_auth_db() as db:
         if d.user_count(db) > 0:
             return RedirectResponse("/login", status_code=303)
         user_id = d.create_user(db, username, password, is_admin=True)
@@ -177,7 +181,7 @@ def login_page(request: Request):
 @app.post("/login")
 def login_submit(request: Request, username: str = Form(...), password: str = Form(...)):
     ip = request.client.host if request.client else "unknown"
-    with d.get_db() as db:
+    with d.get_auth_db() as db:
         if d.recent_login_failures(db, ip) >= d.LOGIN_MAX_FAILURES:
             return templates.TemplateResponse(
                 "login.html",
@@ -202,7 +206,7 @@ def login_submit(request: Request, username: str = Form(...), password: str = Fo
 
 @app.post("/logout")
 def logout(request: Request):
-    with d.get_db() as db:
+    with d.get_auth_db() as db:
         d.delete_session(db, request.cookies.get(SESSION_COOKIE, ""))
     resp = RedirectResponse("/login", status_code=303)
     resp.delete_cookie(SESSION_COOKIE)
@@ -220,9 +224,10 @@ def _require_admin(request):
 def users_page(request: Request, error: str = ""):
     if not _require_admin(request):
         return RedirectResponse("/", status_code=303)
-    with d.get_db() as db:
+    with d.get_auth_db() as db:
         users = [dict(u) for u in d.all_users(db)]
-    return _render(request, "users.html", users=users, error=error or None)
+        owner_id = d.get_owner_id(db)
+    return _render(request, "users.html", users=users, owner_id=owner_id, error=error or None)
 
 
 @app.post("/users")
@@ -233,7 +238,7 @@ def add_user(request: Request, username: str = Form(...), password: str = Form(.
     if len(password) < 8:
         return RedirectResponse("/users?error=Password+needs+at+least+8+characters.", status_code=303)
     try:
-        with d.get_db() as db:
+        with d.get_auth_db() as db:
             d.create_user(db, username, password, is_admin=bool(is_admin))
     except Exception:
         return RedirectResponse("/users?error=That+username+is+taken.", status_code=303)
@@ -245,12 +250,17 @@ def remove_user(request: Request, user_id: int):
     admin = _require_admin(request)
     if not admin:
         return RedirectResponse("/", status_code=303)
-    with d.get_db() as db:
+    removed = False
+    with d.get_auth_db() as db:
         target = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
-        if target and target["id"] != admin["id"]:
+        if target and target["id"] != admin["id"] and target["id"] != d.get_owner_id(db):
             # never delete the last admin
             if not (target["is_admin"] and d.admin_count(db) <= 1):
                 d.delete_user(db, user_id)
+                removed = True
+    if removed:
+        with d.get_auth_db() as db:
+            d.remove_user_data(db, user_id)
     return RedirectResponse("/users", status_code=303)
 
 
