@@ -4,115 +4,101 @@
 {% set data = result.data %}{% set ln = data.loan %}{% set pv = result.preview %}{% set s = pv.summary %}
 {% set cur = ln.currency %}
 
-<div class="month-nav">
-  <a class="navarrow" href="/loans/import" title="Back">&larr;</a>
-  <h1>Review before creating</h1>
+<a class="back" href="/loans/import">{{ icon('arrow-left', 16) }} Back</a>
+<div class="page-head">
+  <div><h1>Review before creating</h1><p class="sub">Nothing has been saved yet. Check the numbers against your lender's statement.</p></div>
 </div>
-<p class="muted" style="margin-top:0">Nothing has been saved yet. Check the numbers against your lender's statement.</p>
+
+<div class="stack">
 
 {% if result.warnings %}
-<div class="notice warn">
-  <strong>Please check:</strong>
-  <ul style="margin:0.3rem 0 0">{% for w in result.warnings %}<li>{{ w }}</li>{% endfor %}</ul>
-</div>
+<div class="notice warn"><b>Please check</b><ul>{% for w in result.warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>
 {% endif %}
-{% for i in result.info %}<div class="notice info">{{ i }}</div>{% endfor %}
+{% for i in result.info %}<div class="notice">{{ i }}</div>{% endfor %}
 
-<div class="cards">
-  <div class="card"><div class="label">Outstanding principal today</div>
-    <div class="value">{{ s.outstanding | money(cur) }}</div>
+<div class="stats">
+  <div class="stat"><div class="label">Still to repay today</div><div class="value">{{ s.outstanding | money(cur) }}</div>
     <div class="sub">{% if pv.installments %}statement balance {{ pv.statement_closing | money(cur) }} on {{ pv.last_due }}{% if pv.projected_paid %}, then {{ pv.projected_paid }} EMI{{ 's' if pv.projected_paid != 1 }} projected{% endif %}{% else %}at the start date{% endif %}</div></div>
-  <div class="card"><div class="label">Installments recorded</div>
-    <div class="value">{{ pv.installments }}</div>
+  <div class="stat"><div class="label">Installments recorded</div><div class="value">{{ pv.installments }}</div>
     <div class="sub">{% if pv.installments %}{{ pv.first_due }} to {{ pv.last_due }}{% else %}none: tracking starts fresh{% endif %}</div></div>
-  <div class="card"><div class="label">Interest paid (recorded)</div>
-    <div class="value">{{ pv.interest_recorded | money(cur) }}</div></div>
+  <div class="stat"><div class="label">Interest paid (recorded)</div><div class="value">{{ pv.interest_recorded | money(cur) }}</div></div>
   {% if pv.capitalized %}
-  <div class="card"><div class="label">Interest added to principal</div>
-    <div class="value">{{ pv.capitalized | money(cur) }}</div>
-    <div class="sub">unpaid interest that was capitalised</div></div>
+  <div class="stat"><div class="label">Interest added to principal</div><div class="value">{{ pv.capitalized | money(cur) }}</div><div class="sub">unpaid interest that was capitalised</div></div>
   {% endif %}
 </div>
 
-<div class="panel">
-  <h2>The loan</h2>
-  <div class="kv">
-    <div><span class="muted small">Name</span><br><strong>{{ ln.name }}</strong></div>
-    {% if ln.lender %}<div><span class="muted small">Lender</span><br><strong>{{ ln.lender }}</strong></div>{% endif %}
-    <div><span class="muted small">Amount borrowed</span><br><strong>{{ ln.principal | money(cur) }}</strong></div>
-    <div><span class="muted small">Start</span><br><strong>{{ ln.start_date }}</strong></div>
-    <div><span class="muted small">Original tenure</span><br><strong>{% if ln.tenure_months %}{{ ln.tenure_months }} months{% else %}unknown{% endif %}</strong></div>
-    <div><span class="muted small">Data accurate to</span><br><strong>{{ data.as_of or 'start' }}</strong></div>
-  </div>
-  {% if ln.notes %}<p class="muted small" style="margin-bottom:0">{{ ln.notes }}</p>{% endif %}
+<div class="grid-2">
+  <section class="card">
+    <div class="card-head"><h2>The loan</h2></div>
+    <div class="kv">
+      <div><div class="k">Name</div><div class="v">{{ ln.name }}</div></div>
+      {% if ln.lender %}<div><div class="k">Lender</div><div class="v">{{ ln.lender }}</div></div>{% endif %}
+      <div><div class="k">Amount borrowed</div><div class="v">{{ ln.principal | money(cur) }}</div></div>
+      <div><div class="k">Start</div><div class="v">{{ ln.start_date }}</div></div>
+      <div><div class="k">Original tenure</div><div class="v">{% if ln.tenure_months %}{{ ln.tenure_months }} months{% else %}unknown{% endif %}</div></div>
+      <div><div class="k">Data accurate to</div><div class="v">{{ data.as_of or 'start' }}</div></div>
+    </div>
+    {% if ln.notes %}<hr class="rule"><p class="muted small">{{ ln.notes }}</p>{% endif %}
+  </section>
+  <section class="card">
+    <div class="card-head"><div><h2>What Hisaab will project</h2><div class="sub">From the last recorded installment, at the latest EMI and rate</div></div></div>
+    <div class="kv">
+      <div><div class="k">Current EMI</div><div class="v">{{ s.current_emi | money(cur, 2) }}</div></div>
+      <div><div class="k">Current rate</div><div class="v">{{ '%g' % s.current_rate }}%</div></div>
+      <div><div class="k">EMIs still to pay</div><div class="v">{{ s.emis_left }}</div></div>
+      <div><div class="k">Projected end</div><div class="v">{% if s.end_date %}{{ s.end_date.strftime('%b %Y') }}{% else %}never (EMI too low){% endif %}</div>
+        {% if s.months_ahead is not none %}<div class="small {{ 'pos' if s.months_ahead >= 0 else 'neg' }}" style="font-weight:600">
+          {% if s.months_ahead > 0 %}{{ s.months_ahead }} months ahead of plan{% elif s.months_ahead < 0 %}{{ -s.months_ahead }} months behind plan{% else %}on plan{% endif %}</div>{% endif %}</div>
+      <div><div class="k">Interest still to come</div><div class="v">{{ pv.interest_ahead | money(cur) }}</div></div>
+    </div>
+  </section>
 </div>
 
-<div class="panel">
-  <h2>What Hisaab will project</h2>
-  <p class="small muted" style="margin-top:0">From the last recorded installment, using the latest EMI and rate below.</p>
-  <div class="kv">
-    <div><span class="muted small">Current EMI</span><br><strong>{{ s.current_emi | money(cur, 2) }}</strong></div>
-    <div><span class="muted small">Current rate</span><br><strong>{{ '%g' % s.current_rate }}%</strong></div>
-    <div><span class="muted small">EMIs still to pay</span><br><strong>{{ s.emis_left }}</strong></div>
-    <div><span class="muted small">Projected end</span><br>
-      <strong>{% if s.end_date %}{{ s.end_date.strftime('%b %Y') }}{% else %}never (EMI too low){% endif %}</strong>
-      {% if s.months_ahead is not none %}
-      <span class="small {{ 'pos' if s.months_ahead >= 0 else 'neg' }}">
-        {% if s.months_ahead > 0 %}{{ s.months_ahead }} mo ahead of plan{% elif s.months_ahead < 0 %}{{ -s.months_ahead }} mo behind plan{% else %}on plan{% endif %}
-      </span>{% endif %}</div>
-    <div><span class="muted small">Total interest still to come</span><br>
-      <strong>{{ pv.interest_ahead | money(cur) }}</strong></div>
-  </div>
-</div>
-
-<div class="chart-grid">
-  <div class="panel">
-    <h2>EMI history ({{ pv.emi_entries }})</h2>
-    <div class="table-scroll"><table class="periods">
-      <thead><tr><th>From</th><th></th><th>EMI</th></tr></thead>
-      <tbody>{% for when, amount in data.emis %}
-        <tr><td>{{ when }}</td><td></td><td>{{ amount | money(cur, 2) }}</td></tr>{% endfor %}</tbody>
+<div class="grid-2">
+  <section class="card">
+    <div class="card-head"><h2>EMI history ({{ pv.emi_entries }})</h2></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>From</th><th>EMI</th></tr></thead>
+      <tbody>{% for when, amount in data.emis %}<tr><td>{{ when }}</td><td>{{ amount | money(cur, 2) }}</td></tr>{% endfor %}</tbody>
     </table></div>
-  </div>
-  <div class="panel">
-    <h2>Rate history ({{ pv.rate_entries }})</h2>
-    <div class="table-scroll"><table class="periods">
-      <thead><tr><th>From</th><th></th><th>Rate</th></tr></thead>
-      <tbody>{% for when, rate in data.rates %}
-        <tr><td>{{ when }}</td><td></td><td>{{ '%g' % rate }}%</td></tr>{% endfor %}</tbody>
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>Rate history ({{ pv.rate_entries }})</h2></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>From</th><th>Rate</th></tr></thead>
+      <tbody>{% for when, rate in data.rates %}<tr><td>{{ when }}</td><td>{{ '%g' % rate }}%</td></tr>{% endfor %}</tbody>
     </table></div>
-  </div>
+  </section>
 </div>
 
 {% if data.prepayments %}
-<div class="panel">
-  <h2>Prepayments ({{ data.prepayments | length }})</h2>
-  <div class="table-scroll"><table>
-    <thead><tr><th>Date</th><th>Amount</th><th style="text-align:left">Note</th></tr></thead>
-    <tbody>{% for p in data.prepayments %}
-      <tr><td>{{ p.date }}</td><td>{{ p.amount | money(cur, 2) }}</td><td style="text-align:left" class="muted">{{ p.note }}</td></tr>{% endfor %}</tbody>
+<section class="card">
+  <div class="card-head"><h2>Prepayments ({{ data.prepayments | length }})</h2></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Date</th><th>Amount</th><th class="tl">Note</th></tr></thead>
+    <tbody>{% for p in data.prepayments %}<tr><td>{{ p.date }}</td><td>{{ p.amount | money(cur, 2) }}</td><td class="tl muted">{{ p.note }}</td></tr>{% endfor %}</tbody>
   </table></div>
-</div>
+</section>
 {% endif %}
 
 {% if data.installments %}
-<details class="panel schedule">
-  <summary>Recorded installments ({{ pv.installments }})</summary>
-  <div class="table-scroll" style="margin-top:0.6rem"><table>
-    <thead><tr><th>#</th><th>Due</th><th>EMI</th><th>Principal</th><th>Interest</th><th>Balance</th></tr></thead>
+<details class="card">
+  <summary><span>Recorded installments ({{ pv.installments }})</span>{{ icon('chevron-down', 18, 'chev') }}</summary>
+  <div class="table-wrap" style="margin-top:14px"><table class="schedule">
+    <thead><tr><th>#</th><th class="tl">Due</th><th>EMI</th><th>Principal</th><th>Interest</th><th>Balance</th></tr></thead>
     <tbody>{% for r in data.installments %}
-      <tr><td>{{ loop.index }}</td><td style="text-align:left">{{ r.due }}</td>
-        <td>{{ r.emi | money(cur, 2) }}</td><td>{{ r.principal | money(cur, 2) }}</td>
-        <td>{{ r.interest | money(cur, 2) }}</td>
+      <tr><td>{{ loop.index }}</td><td class="tl">{{ r.due }}</td>
+        <td>{{ r.emi | money(cur, 2) }}</td><td>{{ r.principal | money(cur, 2) }}</td><td>{{ r.interest | money(cur, 2) }}</td>
         <td>{{ r.closing | money(cur, 2) }}{% if r.capitalized %} <span class="badge">+{{ r.capitalized | money(cur) }} added</span>{% endif %}</td></tr>{% endfor %}</tbody>
   </table></div>
 </details>
 {% endif %}
 
-<form method="post" action="/loans/import/confirm" style="margin-top:1rem; display:flex; gap:0.6rem; flex-wrap:wrap">
+<form method="post" action="/loans/import/confirm" class="row">
   <textarea name="payload" hidden>{{ payload }}</textarea>
-  <button type="submit">Create this loan</button>
-  <a class="btn secondary" href="/loans/import">Back</a>
+  <button class="btn" type="submit">{{ icon('check', 16) }} Create this loan</button>
+  <a class="btn btn-soft" href="/loans/import">Back</a>
 </form>
 
+</div>
 {% endblock %}

@@ -2,26 +2,28 @@
 {% block title %}Users · Hisaab{% endblock %}
 {% block content %}
 
-<h1>Users</h1>
-<p class="muted small">Everyone shares the same household data. Only admins can manage users;
-the last admin can never be deleted.</p>
+<div class="page-head">
+  <div><h1>Users</h1><p class="sub">Everyone shares the same household data. Only admins can manage users, and the last admin can never be deleted.</p></div>
+</div>
 
-{% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+<div class="stack">
+{% if error %}<div class="notice error" role="alert">{{ error }}</div>{% endif %}
 
-<div class="panel">
-  <div class="table-scroll"><table>
-    <thead><tr><th>Username</th><th>Role</th><th>Since</th><th></th></tr></thead>
+<section class="card">
+  <div class="card-head"><h2>People with access</h2></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Username</th><th class="tl">Role</th><th>Since</th><th></th></tr></thead>
     <tbody>
     {% for u in users %}
       <tr>
-        <td>{{ u.username }}{% if u.id == user.id %} <span class="muted small">(you)</span>{% endif %}</td>
-        <td>{% if u.is_admin %}Admin{% else %}Member{% endif %}</td>
+        <td><span class="row" style="gap:10px; flex-wrap:nowrap"><span class="avatar">{{ u.username[:1] }}</span>
+          <b>{{ u.username }}</b>{% if u.id == user.id %}<span class="muted small">(you)</span>{% endif %}</span></td>
+        <td class="tl">{% if u.is_admin %}<span class="badge">Admin</span>{% else %}<span class="badge mute">Member</span>{% endif %}</td>
         <td class="muted small">{{ u.created_at[:10] }}</td>
         <td style="width:1%">
           {% if u.id != user.id %}
-          <form method="post" action="/users/{{ u.id }}/delete"
-                onsubmit="return confirm('Remove {{ u.username }}? They will no longer be able to log in.')">
-            <button class="danger" type="submit" title="Remove user">&#10005;</button>
+          <form method="post" action="/users/{{ u.id }}/delete" onsubmit="return confirm('Remove {{ u.username }}? They will no longer be able to log in.')">
+            <button class="btn btn-ghost btn-icon btn-sm" type="submit" title="Remove user" aria-label="Remove {{ u.username }}">{{ icon('trash', 16) }}</button>
           </form>
           {% endif %}
         </td>
@@ -29,20 +31,19 @@ the last admin can never be deleted.</p>
     {% endfor %}
     </tbody>
   </table></div>
+</section>
 
-  <h2>Add a user</h2>
-  <form class="inline" method="post" action="/users">
-    <label class="field">Username
-      <input name="username" autocomplete="off" required>
-    </label>
-    <label class="field">Password <span class="muted">(min 8 chars)</span>
-      <input type="password" name="password" autocomplete="new-password" minlength="8" required>
-    </label>
-    <label class="field" style="flex-direction:row; align-items:center; gap:0.4rem; padding-bottom:0.6rem">
-      <input type="checkbox" name="is_admin" value="1" style="width:auto"> Admin
-    </label>
-    <button type="submit">Add user</button>
+<section class="card">
+  <div class="card-head"><div><h2>Add a user</h2><div class="sub">They log in with this username and password.</div></div></div>
+  <form class="form-row" method="post" action="/users">
+    <label class="field">Username <input name="username" autocomplete="off" required></label>
+    <label class="field">Password <span class="hint">at least 8 characters</span>
+      <input type="password" name="password" autocomplete="new-password" minlength="8" required></label>
+    <label class="field auto" style="flex-direction:row; align-items:center; gap:8px; padding-bottom:11px">
+      <input type="checkbox" name="is_admin" value="1"> Make admin</label>
+    <div class="field auto"><button class="btn" type="submit">{{ icon('plus', 16) }} Add user</button></div>
   </form>
+</section>
 </div>
 
 {% endblock %}

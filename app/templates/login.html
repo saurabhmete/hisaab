@@ -2,25 +2,30 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Log in · Hisaab</title>
-<link rel="stylesheet" href="/static/style.css">
+<script>try { var t = localStorage.getItem('hisaab_theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<link rel="stylesheet" href="{{ asset('style.css') }}">
 </head>
 <body>
-<div class="auth-wrap">
-  <h1>&#128181; Hisaab</h1>
-  {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
-  <div class="panel">
-    <form method="post" action="/login">
+<main class="auth">
+  <div class="auth-card">
+    <a class="brand" href="/">{{ brand_mark(24) }} Hisaab</a>
+    <div>
+      <h1>Welcome back</h1>
+      <p class="muted small" style="text-align:center; margin-top:6px">Log in to see your money.</p>
+    </div>
+    {% if error %}<div class="notice error" role="alert">{{ error }}</div>{% endif %}
+    <form class="card" method="post" action="/login">
       <label class="field">Username
         <input name="username" autocomplete="username" autofocus required>
       </label>
       <label class="field">Password
         <input type="password" name="password" autocomplete="current-password" required>
       </label>
-      <button type="submit">Log in</button>
+      <button class="btn btn-block" type="submit">Log in</button>
     </form>
   </div>
-</div>
+</main>
 </body>
 </html>

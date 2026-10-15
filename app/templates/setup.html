@@ -2,42 +2,48 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Set up · Hisaab</title>
-<link rel="stylesheet" href="/static/style.css">
+<script>try { var t = localStorage.getItem('hisaab_theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<link rel="stylesheet" href="{{ asset('style.css') }}">
 </head>
 <body>
-<div class="auth-wrap">
-  <h1>&#128181; Welcome to Hisaab</h1>
-  {% if locked %}
-  <div class="panel">
-    <p style="margin-top:0"><strong>Hisaab isn't set up yet.</strong></p>
-    <p class="muted small" style="margin-bottom:0">
-      Creating the admin account requires the setup link, which is printed in the
-      server log when the app starts. If you run this server, check
-      <code>docker compose logs hisaab</code> and open the <code>/setup?token=…</code>
-      URL it shows.
-    </p>
-  </div>
-  {% else %}
-  <p class="muted" style="text-align:center">Create the admin account. Only admins can add or remove users later.</p>
-  {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
-  <div class="panel">
-    <form method="post" action="/setup">
+<main class="auth">
+  <div class="auth-card">
+    <a class="brand" href="/">{{ brand_mark(24) }} Hisaab</a>
+    {% if locked %}
+    <div>
+      <h1>Hisaab isn't set up yet</h1>
+      <p class="muted small" style="text-align:center; margin-top:6px">Creating the first account needs a private setup link.</p>
+    </div>
+    <div class="card">
+      <p class="small muted" style="margin:0">
+        The link is printed in the server log when the app starts. If you run this server, check
+        <code>docker compose logs hisaab</code> and open the <code>/setup?token=…</code> address it shows.
+      </p>
+    </div>
+    {% else %}
+    <div>
+      <h1>Welcome to Hisaab</h1>
+      <p class="muted small" style="text-align:center; margin-top:6px">Create the admin account. Only admins can add or remove users later.</p>
+    </div>
+    {% if error %}<div class="notice error" role="alert">{{ error }}</div>{% endif %}
+    <form class="card" method="post" action="/setup">
       <input type="hidden" name="token" value="{{ token }}">
       <label class="field">Username
         <input name="username" autocomplete="username" autofocus required>
       </label>
-      <label class="field">Password <span class="muted">(at least 8 characters)</span>
+      <label class="field">Password
         <input type="password" name="password" autocomplete="new-password" minlength="8" required>
+        <span class="hint">At least 8 characters.</span>
       </label>
       <label class="field">Repeat password
         <input type="password" name="password2" autocomplete="new-password" minlength="8" required>
       </label>
-      <button type="submit">Create admin account</button>
+      <button class="btn btn-block" type="submit">Create admin account</button>
     </form>
+    {% endif %}
   </div>
-  {% endif %}
-</div>
+</main>
 </body>
 </html>

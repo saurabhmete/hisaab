@@ -6,102 +6,119 @@
 {% set prev_m = month - 1 if month > 1 else 12 %}
 {% set next_y = year if month < 12 else year + 1 %}
 {% set next_m = month + 1 if month < 12 else 1 %}
-<div class="month-nav">
-  <a class="navarrow" href="/month/{{ prev_y }}/{{ prev_m }}" title="{{ month_names[prev_m - 1] }}">&larr;</a>
-  <h1>{{ month_names[month - 1] }} {{ year }}</h1>
-  <a class="navarrow" href="/month/{{ next_y }}/{{ next_m }}" title="{{ month_names[next_m - 1] }}">&rarr;</a>
-  {% if not exists %}<span class="muted small">planning a new month</span>{% endif %}
-</div>
 
-{% if saved %}
-<div class="notice">Saved. <a href="/?year={{ year }}&month={{ month }}">View on dashboard</a></div>
-{% endif %}
-{% if prefilled %}
-<div class="notice info">
-  Pre-filled from your last recorded month — adjust the plan, remove what doesn't
-  apply, then decide what to invest. Nothing is stored until you save.
-</div>
-{% endif %}
-
-<form method="post" action="/month/{{ year }}/{{ month }}/save" id="monthform">
-
-<div class="panel">
-  <h2>1 &middot; Salary</h2>
-  <label class="field" style="max-width:12rem">This month's salary (&euro;)
-    <input type="number" step="0.01" name="salary" value="{{ '%g' % salary if salary is not none else '' }}" required>
-  </label>
-</div>
-
-<div class="panel">
-  <h2>2 &middot; Plan the month's expenses</h2>
-  {% if loan_emis %}
-  <div class="notice info" style="margin-top:0">
-    <span class="small">Loan EMIs due this month:</span>
-    <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.4rem">
-      {% for l in loan_emis %}
-      <button type="button" class="secondary emi-suggest" data-cat="{{ l.category }}" data-amt="{{ l.amount }}">
-        {{ 'Update' if l.replaces else '+ Add' }} {{ l.category }} &middot; &euro;{{ '%g' % l.amount }}
-      </button>
-      {% endfor %}
+<a class="back" href="/?year={{ year }}&month={{ month }}">{{ icon('arrow-left', 16) }} Overview</a>
+<div class="page-head">
+  <div>
+    <div class="month-switch">
+      <a class="btn btn-soft btn-icon" href="/month/{{ prev_y }}/{{ prev_m }}" aria-label="Previous month: {{ month_names[prev_m - 1] }}" title="{{ month_names[prev_m - 1] }}">{{ icon('chevron-left') }}</a>
+      <h1 class="title">{{ month_names[month - 1] }} {{ year }}</h1>
+      <a class="btn btn-soft btn-icon" href="/month/{{ next_y }}/{{ next_m }}" aria-label="Next month: {{ month_names[next_m - 1] }}" title="{{ month_names[next_m - 1] }}">{{ icon('chevron-right') }}</a>
     </div>
+    <p class="sub">{% if exists %}Edit this month's salary, expenses and investing.{% else %}Plan the month first, then decide what you can invest.{% endif %}</p>
+  </div>
+</div>
+
+<div class="stack" style="margin-bottom:16px">
+  {% if saved %}
+  <div class="notice success" role="status"><b>Saved.</b> <a href="/?year={{ year }}&month={{ month }}">See it on the overview {{ icon('arrow-right', 14) }}</a></div>
+  {% endif %}
+  {% if prefilled %}
+  <div class="notice">
+    <b>Pre-filled from your last recorded month.</b> Adjust the amounts, remove what doesn't apply,
+    then decide what to invest. Nothing is stored until you save.
   </div>
   {% endif %}
-  <div class="editor-head"><span>Category</span><span style="text-align:right">Amount (&euro;)</span><span></span></div>
-  <div class="editor-rows" id="rows">
-    {% for it in items %}
-    <div class="editor-row">
-      <input name="category" list="cats" value="{{ it.category }}" placeholder="Category">
-      <input name="amount" type="number" step="0.01" value="{{ '%g' % it.amount }}" style="text-align:right">
-      <button type="button" class="danger" title="Remove row" onclick="removeRow(this)">&minus;</button>
-    </div>
-    {% endfor %}
-  </div>
-  <template id="rowtpl">
-    <div class="editor-row">
-      <input name="category" list="cats" placeholder="Category">
-      <input name="amount" type="number" step="0.01" value="" style="text-align:right" placeholder="0">
-      <button type="button" class="danger" title="Remove row" onclick="removeRow(this)">&minus;</button>
-    </div>
-  </template>
-  <datalist id="cats">
-    {% for c in categories %}<option value="{{ c }}">{% endfor %}
-  </datalist>
-  <div style="margin-top:0.6rem">
-    <button type="button" class="secondary" onclick="addRow()">+ Add expense</button>
-  </div>
-  <div class="editor-total"><span>Planned expenses</span><span id="total">&euro;0</span></div>
 </div>
 
-<div class="panel">
-  <h2>3 &middot; Where the money goes</h2>
-  <div class="ledger">
-    <div class="ledger-row"><span>Salary</span><span id="l-salary">&euro;0</span></div>
-    <div class="ledger-row"><span>Planned expenses</span><span id="l-expenses">&minus;&euro;0</span></div>
-    <div class="ledger-row rule"><span>Left after expenses <span class="muted small">&mdash; you can invest up to this</span></span>
-      <span id="l-can">&euro;0</span></div>
-    <div class="ledger-row invest">
-      <span>
-        Investing this month
-        <span class="quickfill">
-          {% if eur_inr_rate %}
-          <button type="button" class="secondary" id="lakhbtn"
-                  title="₹1,00,000 at the latest EUR→INR rate ({{ eur_inr_rate }})">1 lakh &#8377;</button>
-          {% endif %}
-          <button type="button" class="secondary" id="allbtn">Everything</button>
-        </span>
-      </span>
-      <span>&minus;&nbsp;<input type="number" step="0.01" name="invested" value="{{ '%g' % invested }}"
-             style="text-align:right; width:8rem" aria-label="Investing this month (euros)"></span>
-    </div>
-    <div class="ledger-row rule final"><span>Remainder in main account</span><span id="l-left">&euro;0</span></div>
+<form method="post" action="/month/{{ year }}/{{ month }}/save" id="monthform">
+<div class="planner">
+
+  <div class="stack">
+    <section class="card">
+      <div class="sec-title"><span class="step-num">1</span><h2>Salary</h2></div>
+      <label class="field" style="max-width:260px">This month's salary
+        <div class="input-affix"><span>€</span>
+          <input type="number" step="0.01" name="salary" value="{{ '%g' % salary if salary is not none else '' }}" required inputmode="decimal">
+        </div>
+      </label>
+    </section>
+
+    <section class="card">
+      <div class="sec-title"><span class="step-num">2</span><h2>Plan the expenses</h2></div>
+
+      {% if loan_emis %}
+      <div class="notice" style="margin-bottom:16px">
+        <div class="small" style="font-weight:600; margin-bottom:8px">Loan EMIs due this month</div>
+        <div class="row">
+          {% for l in loan_emis %}
+          <button type="button" class="btn btn-soft btn-sm emi-suggest" data-cat="{{ l.category }}" data-amt="{{ l.amount }}">
+            {{ icon('plus', 14) }} {{ 'Update' if l.replaces else 'Add' }} {{ l.category }} · €{{ '%g' % l.amount }}
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="editor-head"><span>Category</span><span>Amount (€)</span><span></span></div>
+      <div id="rows">
+        {% for it in items %}
+        <div class="editor-row">
+          <input name="category" list="cats" value="{{ it.category }}" placeholder="Category" aria-label="Category">
+          <input name="amount" type="number" step="0.01" value="{{ '%g' % it.amount }}" inputmode="decimal" aria-label="Amount in euros">
+          <button type="button" class="btn btn-ghost btn-icon btn-sm" title="Remove" aria-label="Remove this row" onclick="removeRow(this)">{{ icon('x', 16) }}</button>
+        </div>
+        {% endfor %}
+      </div>
+      <template id="rowtpl">
+        <div class="editor-row">
+          <input name="category" list="cats" placeholder="Category" aria-label="Category">
+          <input name="amount" type="number" step="0.01" value="" placeholder="0" inputmode="decimal" aria-label="Amount in euros">
+          <button type="button" class="btn btn-ghost btn-icon btn-sm" title="Remove" aria-label="Remove this row" onclick="removeRow(this)">{{ icon('x', 16) }}</button>
+        </div>
+      </template>
+      <datalist id="cats">{% for c in categories %}<option value="{{ c }}">{% endfor %}</datalist>
+
+      <button type="button" class="btn btn-soft btn-sm" style="margin-top:12px" onclick="addRow()">{{ icon('plus', 15) }} Add expense</button>
+      <div class="editor-total"><span>Planned expenses</span><span id="total">€0</span></div>
+    </section>
   </div>
+
+  <aside class="planner-aside">
+    <section class="card">
+      <div class="sec-title"><span class="step-num">3</span><h2>Where the money goes</h2></div>
+      <div class="ledger">
+        <div class="ledger-row"><span>Salary</span><span id="l-salary">€0</span></div>
+        <div class="ledger-row"><span>Planned expenses</span><span id="l-expenses">−€0</span></div>
+        <div class="ledger-row rule"><span>Left after expenses</span><span id="l-can">€0</span></div>
+        <p class="muted small" style="margin-top:-2px">This is the most you can invest.</p>
+
+        <div class="invest-box">
+          <label class="field">Invest this month
+            <div class="input-affix"><span>€</span>
+              <input type="number" step="0.01" name="invested" value="{{ '%g' % invested }}" inputmode="decimal">
+            </div>
+          </label>
+          <div class="quickfill">
+            {% if eur_inr_rate %}
+            <button type="button" class="btn btn-soft btn-sm" id="lakhbtn" title="₹1,00,000 at the latest EUR→INR rate ({{ eur_inr_rate }})">₹1 lakh</button>
+            {% endif %}
+            <button type="button" class="btn btn-soft btn-sm" id="allbtn">All of it</button>
+          </div>
+        </div>
+
+        <div class="ledger-row final"><span>Remainder in account</span><span id="l-left">€0</span></div>
+      </div>
+      <button class="btn btn-block btn-save" type="submit" style="margin-top:18px">{{ icon('check', 17) }} Save month</button>
+    </section>
+  </aside>
+
 </div>
 
 <div class="savebar">
-  <span id="leftover" style="font-weight:600; font-variant-numeric:tabular-nums"></span>
-  <button type="submit">Save month</button>
+  <span id="leftover"></span>
+  <button class="btn" type="submit">Save</button>
 </div>
-
 </form>
 
 <script>
@@ -161,7 +178,7 @@ function recalc() {
   leftEl.classList.toggle('neg', left < 0);
   leftEl.classList.toggle('pos', left >= 0);
   const bar = document.getElementById('leftover');
-  bar.textContent = `Remainder in main account: ${fmt(left)}`;
+  bar.textContent = `Remainder ${fmt(left)}`;
   bar.classList.toggle('neg', left < 0);
   bar.classList.toggle('pos', left >= 0);
 }

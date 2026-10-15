@@ -3,33 +3,32 @@
 {% block content %}
 {% set data = result.data %}
 
-<div class="month-nav">
-  <a class="navarrow" href="/import" title="Back">&larr;</a>
-  <h1>Review before importing</h1>
+<a class="back" href="/import">{{ icon('arrow-left', 16) }} Back</a>
+<div class="page-head">
+  <div><h1>Review before importing</h1>
+    <p class="sub">Nothing has been saved yet. Months marked <i>updates</i> already exist: the amounts below replace what is stored for those categories, and categories not mentioned stay as they are.</p></div>
 </div>
-<p class="muted" style="margin-top:0">Nothing has been saved yet. Months marked <em>updates</em> already exist; the amounts below replace what is stored for those categories, and categories not mentioned stay as they are.</p>
+
+<div class="stack">
 
 {% if result.warnings %}
-<div class="notice warn">
-  <strong>Please check:</strong>
-  <ul style="margin:0.3rem 0 0">{% for w in result.warnings %}<li>{{ w }}</li>{% endfor %}</ul>
-</div>
+<div class="notice warn"><b>Please check</b><ul>{% for w in result.warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>
 {% endif %}
-{% for i in result.info %}<div class="notice info">{{ i }}</div>{% endfor %}
+{% for i in result.info %}<div class="notice">{{ i }}</div>{% endfor %}
 
-<div class="cards">
-  <div class="card"><div class="label">Months</div><div class="value">{{ change.months | length }}</div>
+<div class="stats">
+  <div class="stat"><div class="label">Months</div><div class="value">{{ change.months | length }}</div>
     <div class="sub">{{ change.new_months }} new · {{ change.updated_months }} update{{ 's' if change.updated_months != 1 }}</div></div>
-  <div class="card"><div class="label">Expense entries</div><div class="value">{{ change.expense_lines }}</div>
+  <div class="stat"><div class="label">Expense entries</div><div class="value">{{ change.expense_lines }}</div>
     <div class="sub">{{ change.total_expenses | eur }} in total</div></div>
-  <div class="card"><div class="label">Investment snapshots</div><div class="value">{{ change.investments | length }}</div></div>
+  <div class="stat"><div class="label">Investment snapshots</div><div class="value">{{ change.investments | length }}</div></div>
 </div>
 
 {% if change.months %}
-<div class="panel">
-  <h2>Months</h2>
-  <div class="table-scroll"><table>
-    <thead><tr><th>Month</th><th>Salary</th><th>Invested</th><th>Expenses</th><th>Entries</th><th></th></tr></thead>
+<section class="card">
+  <div class="card-head"><h2>Months</h2></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Month</th><th>Salary</th><th>Invested</th><th>Expenses</th><th>Entries</th><th class="tl"></th></tr></thead>
     <tbody>
     {% for m in change.months %}
       <tr>
@@ -38,22 +37,22 @@
         <td>{% if m.invested is not none %}{{ m.invested | eur }}{% if m.status == 'update' and m.was_invested != m.invested %} <span class="muted small">was {{ m.was_invested | eur }}</span>{% endif %}{% else %}<span class="muted">—</span>{% endif %}</td>
         <td>{{ m.total | eur }}</td>
         <td>{{ m.lines | length }}</td>
-        <td style="text-align:left">{% if m.status == 'new' %}<span class="badge good">new</span>{% else %}<span class="badge">updates</span>{% endif %}</td>
+        <td class="tl">{% if m.status == 'new' %}<span class="badge good">new</span>{% else %}<span class="badge">updates</span>{% endif %}</td>
       </tr>
     {% endfor %}
     </tbody>
   </table></div>
-</div>
+</section>
 
-<details class="panel schedule">
-  <summary>All expense entries ({{ change.expense_lines }})</summary>
-  <div class="table-scroll" style="margin-top:0.6rem"><table>
-    <thead><tr><th>Month</th><th style="text-align:left">Category</th><th>Amount</th><th>Currently</th></tr></thead>
+<details class="card">
+  <summary><span>All expense entries ({{ change.expense_lines }})</span>{{ icon('chevron-down', 18, 'chev') }}</summary>
+  <div class="table-wrap" style="margin-top:14px"><table>
+    <thead><tr><th>Month</th><th class="tl">Category</th><th>Amount</th><th>Currently</th></tr></thead>
     <tbody>
     {% for m in change.months %}{% for l in m.lines %}
       <tr>
         <td>{{ month_names[m.month - 1][:3] }} {{ m.year }}</td>
-        <td style="text-align:left">{{ l.category }}</td>
+        <td class="tl">{{ l.category }}</td>
         <td>{{ l.amount | money('EUR', 2) }}</td>
         <td>{% if m.status == 'new' %}<span class="muted">—</span>{% elif l.was is none %}<span class="muted">not set</span>{% elif l.was != l.amount %}{{ l.was | money('EUR', 2) }}{% else %}<span class="muted">same</span>{% endif %}</td>
       </tr>
@@ -64,10 +63,10 @@
 {% endif %}
 
 {% if change.investments %}
-<div class="panel">
-  <h2>Investment snapshots</h2>
-  <div class="table-scroll"><table>
-    <thead><tr><th>Month</th><th>India value</th><th>India profit</th><th>Germany value</th><th>Germany profit</th><th>Rate</th><th></th></tr></thead>
+<section class="card">
+  <div class="card-head"><div><h2>Investment snapshots</h2><div class="sub">A dash means the file has no value, so whatever is stored stays.</div></div></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Month</th><th>India value</th><th>India profit</th><th>Germany value</th><th>Germany profit</th><th>Rate</th><th class="tl"></th></tr></thead>
     <tbody>
     {% for i in change.investments %}
       <tr>
@@ -77,19 +76,19 @@
         <td>{{ i.germany_value | eur if i.germany_value is not none else '—' }}</td>
         <td>{{ i.germany_profit | eur if i.germany_profit is not none else '—' }}</td>
         <td>{{ ('%g' % i.eur_inr_rate) if i.eur_inr_rate is not none else '—' }}</td>
-        <td style="text-align:left">{% if i.status == 'new' %}<span class="badge good">new</span>{% else %}<span class="badge">updates</span>{% endif %}</td>
+        <td class="tl">{% if i.status == 'new' %}<span class="badge good">new</span>{% else %}<span class="badge">updates</span>{% endif %}</td>
       </tr>
     {% endfor %}
     </tbody>
   </table></div>
-  <p class="muted small" style="margin-bottom:0">A dash means the file has no value, so whatever is stored stays.</p>
-</div>
+</section>
 {% endif %}
 
-<form method="post" action="/import/assisted/confirm" style="margin-top:1rem; display:flex; gap:0.6rem; flex-wrap:wrap">
+<form method="post" action="/import/assisted/confirm" class="row">
   <textarea name="payload" hidden>{{ payload }}</textarea>
-  <button type="submit">Import this</button>
-  <a class="btn secondary" href="/import">Back</a>
+  <button class="btn" type="submit">{{ icon('check', 16) }} Import this</button>
+  <a class="btn btn-soft" href="/import">Back</a>
 </form>
 
+</div>
 {% endblock %}

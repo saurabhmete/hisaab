@@ -12,6 +12,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from . import data_import
 from . import database as d
+from . import icons
 from . import importer
 from . import loan_import
 from . import loans
@@ -34,6 +35,20 @@ def _money(value, currency="EUR", decimals=0):
 templates.env.filters["money"] = _money
 templates.env.globals["month_names"] = d.MONTH_NAMES
 templates.env.globals["currencies"] = loans.CURRENCIES
+templates.env.globals["icon"] = icons.icon
+templates.env.globals["brand_mark"] = icons.brand_mark
+
+
+def _asset(name):
+    """URL of a static file with its modification time, so browsers never reuse a stale copy."""
+    try:
+        version = int(os.path.getmtime(os.path.join(BASE, "static", name)))
+    except OSError:
+        version = 0
+    return f"/static/{name}?v={version}"
+
+
+templates.env.globals["asset"] = _asset
 templates.env.globals["rate_timings"] = loans.RATE_TIMINGS
 
 SESSION_COOKIE = "hisaab_session"
@@ -241,6 +256,19 @@ def remove_user(request: Request, user_id: int):
 
 # ---------- dashboard ----------
 
+def _sparkline(values, width=120, height=40, pad=3):
+    """SVG point strings (line, closed area) for a tiny trend chart, or None."""
+    if len(values) < 2:
+        return None
+    lo, hi = min(values), max(values)
+    span = (hi - lo) or 1
+    step = (width - 2 * pad) / (len(values) - 1)
+    pts = [(pad + i * step, height - pad - (v - lo) / span * (height - 2 * pad)) for i, v in enumerate(values)]
+    line = " ".join(f"{x:.1f},{y:.1f}" for x, y in pts)
+    area = f"{pts[0][0]:.1f},{height} {line} {pts[-1][0]:.1f},{height}"
+    return {"line": line, "area": area, "w": width, "h": height, "end": pts[-1]}
+
+
 @app.get("/")
 def dashboard(request: Request, year: int | None = None, month: int | None = None):
     with d.get_db() as db:
@@ -272,20 +300,43 @@ def dashboard(request: Request, year: int | None = None, month: int | None = Non
                 "invested": m["invested"],
             })
 
-        networth = []
-        for inv in d.all_investments(db):
-            der = d.investment_derived(inv)
-            networth.append({
-                "label": f"{d.MONTH_NAMES[inv['month'] - 1][:3]} {inv['year']}",
-                "value": round(der["net_worth_inr"]),
-                "profit": round(der["profit_inr"]),
-            })
+        prev_row = d.previous_month_row(db, year, month)
+        prev_expense = d.month_summary(db, prev_row)["total_expense"] if prev_row else None
+        prev_label = d.MONTH_NAMES[prev_row["month"] - 1][:3] if prev_row else None
+
+        # investment net worth, at the rate each snapshot was saved with
+        inv_rows = d.all_investments(db)
+        networth_card = None
+        if inv_rows:
+            last = inv_rows[-1]
+            derived = [d.investment_derived(r) for r in inv_rows]
+            networth_card = {
+                "value": derived[-1]["net_worth_inr"], "profit": derived[-1]["profit_inr"],
+                "pct": derived[-1]["overall_pct"],
+                "label": f"{d.MONTH_NAMES[last['month'] - 1][:3]} {last['year']}",
+                "spark": _sparkline([x["net_worth_inr"] for x in derived][-12:]),
+            }
+
+        # loans that still have something to pay
+        today = date.today()
+        loan_cards, loan_totals = [], {}
+        for ln in loans.all_loans(db):
+            data = loans.load(db, ln, today)
+            s = data["summary"]
+            if s["closed"]:
+                continue
+            loan_cards.append({"id": ln["id"], "name": ln["name"], "currency": ln["currency"],
+                               "outstanding": s["outstanding"], "progress": s["progress"],
+                               "emi": s["current_emi"], "next_due": s["next"]["due"] if s["next"] else None})
+            loan_totals[ln["currency"]] = loan_totals.get(ln["currency"], 0.0) + s["outstanding"]
+        soonest = min((c for c in loan_cards if c["next_due"]), key=lambda c: c["next_due"], default=None)
 
     return _render(
         request, "dashboard.html",
         current=current, sel_year=year, sel_month=month,
-        next_y=next_y, next_m=next_m,
-        trend_json=json.dumps(trend), networth_json=json.dumps(networth),
+        next_y=next_y, next_m=next_m, prev_expense=prev_expense, prev_label=prev_label,
+        networth_card=networth_card, loan_cards=loan_cards, loan_totals=loan_totals, soonest=soonest,
+        trend_json=json.dumps(trend),
     )
 
 

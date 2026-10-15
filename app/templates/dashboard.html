@@ -1,152 +1,202 @@
 {% extends "base.html" %}
+{% from "_ui.html" import flow, empty %}
+{% block title %}Overview · Hisaab{% endblock %}
 {% block content %}
 
 {% set pv_y = sel_year if sel_month > 1 else sel_year - 1 %}
 {% set pv_m = sel_month - 1 if sel_month > 1 else 12 %}
 {% set nx_y = sel_year if sel_month < 12 else sel_year + 1 %}
 {% set nx_m = sel_month + 1 if sel_month < 12 else 1 %}
-<div class="month-nav" style="justify-content: space-between; width: 100%">
-  <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap">
-    <a class="navarrow" href="/?year={{ pv_y }}&month={{ pv_m }}" title="{{ month_names[pv_m - 1] }}">&larr;</a>
-    <h1>{{ month_names[sel_month - 1] }} {{ sel_year }}</h1>
-    <a class="navarrow" href="/?year={{ nx_y }}&month={{ nx_m }}" title="{{ month_names[nx_m - 1] }}">&rarr;</a>
-    {% if current %}
-    <a class="btn secondary" href="/month/{{ current.row.year }}/{{ current.row.month }}">Edit</a>
-    {% endif %}
+
+<div class="page-head">
+  <div class="month-switch">
+    <a class="btn btn-soft btn-icon" href="/?year={{ pv_y }}&month={{ pv_m }}" aria-label="Previous month: {{ month_names[pv_m - 1] }}" title="{{ month_names[pv_m - 1] }}">{{ icon('chevron-left') }}</a>
+    <details class="menu">
+      <summary class="title" aria-label="Pick a month">{{ month_names[sel_month - 1] }} {{ sel_year }} {{ icon('chevron-down', 18) }}</summary>
+      <div class="menu-panel">
+        <form method="get" action="/" class="stack">
+          <div class="form-row">
+            <label class="field">Month
+              <select name="month">{% for name in month_names %}<option value="{{ loop.index }}" {% if loop.index == sel_month %}selected{% endif %}>{{ name }}</option>{% endfor %}</select>
+            </label>
+            <label class="field">Year
+              <select name="year">
+                {% for y in years %}<option {% if y == sel_year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+                {% if (years | last | default(0)) < next_y %}<option>{{ next_y }}</option>{% endif %}
+              </select>
+            </label>
+          </div>
+          <button class="btn" type="submit">Go to month</button>
+        </form>
+      </div>
+    </details>
+    <a class="btn btn-soft btn-icon" href="/?year={{ nx_y }}&month={{ nx_m }}" aria-label="Next month: {{ month_names[nx_m - 1] }}" title="{{ month_names[nx_m - 1] }}">{{ icon('chevron-right') }}</a>
   </div>
-  <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap">
-    <a class="btn" href="/month/{{ next_y }}/{{ next_m }}">+ Add {{ month_names[next_m - 1] }} {{ next_y }}</a>
-    <form class="inline" method="get" action="/" style="gap:0.3rem">
-      <select name="month" aria-label="Month">
-        {% for name in month_names %}
-        <option value="{{ loop.index }}" {% if loop.index == sel_month %}selected{% endif %}>{{ name[:3] }}</option>
-        {% endfor %}
-      </select>
-      <select name="year" aria-label="Year">
-        {% for y in years %}<option {% if y == sel_year %}selected{% endif %}>{{ y }}</option>{% endfor %}
-        {% if (years | last | default(0)) < next_y %}<option>{{ next_y }}</option>{% endif %}
-      </select>
-      <button type="submit" class="secondary">Open</button>
-    </form>
+  <div class="actions">
+    {% if current %}<a class="btn btn-soft" href="/month/{{ sel_year }}/{{ sel_month }}">{{ icon('pencil', 16) }} Edit month</a>{% endif %}
+    <a class="btn" href="/month/{{ next_y }}/{{ next_m }}">{{ icon('plus', 16) }} Add {{ month_names[next_m - 1][:3] }} {{ next_y }}</a>
   </div>
 </div>
+
+<div class="stack">
 
 {% if current %}
 {% set r = current.row %}
+{% set left = current.after_invest %}
+{% set salary = r.salary %}
+{% set total_exp = current.total_expense %}
+<section class="card hero">
+  <div class="hero-top">
+    <div>
+      <div class="muted small" style="font-weight:600">{% if left >= 0 %}Left this month{% else %}Over budget this month{% endif %}</div>
+      <div class="bigamount {{ 'neg' if left < 0 else '' }}">{{ left | eur }}</div>
+      <p class="muted" style="margin-top:8px">
+        {% if salary %}From a {{ salary | eur }} salary, after {{ total_exp | eur }} of expenses and {{ r.invested | eur }} invested.{% else %}No salary recorded yet. <a href="/month/{{ sel_year }}/{{ sel_month }}">Add it</a>.{% endif %}
+      </p>
+    </div>
+    <div class="hero-badges">
+      {% if salary %}
+      {% set kept = left / salary * 100 %}
+      <span class="badge {{ 'good' if kept >= 0 else 'bad' }}">{{ '%.0f' % kept }}% of salary kept</span>
+      {% endif %}
+      {% if prev_expense is not none %}
+      {% set delta = total_exp - prev_expense %}
+      {% if delta | abs >= 1 %}
+      <span class="badge {{ 'warn' if delta > 0 else 'good' }}">Spending {{ 'up' if delta > 0 else 'down' }} {{ (delta | abs) | eur }} vs {{ prev_label }}</span>
+      {% endif %}
+      {% endif %}
+    </div>
+  </div>
+  {{ flow(total_exp, r.invested, salary) }}
+  <div class="legend">
+    <span class="item"><span class="dot" style="background: var(--series-2)"></span> Expenses <b>{{ total_exp | eur }}</b>{% if salary %}<span class="muted">{{ '%.0f' % (total_exp / salary * 100) }}%</span>{% endif %}</span>
+    <span class="item"><span class="dot" style="background: var(--series-3)"></span> Invested <b>{{ r.invested | eur }}</b>{% if salary %}<span class="muted">{{ '%.0f' % (r.invested / salary * 100) }}%</span>{% endif %}</span>
+    <span class="item"><span class="dot" style="background: {{ 'var(--bad)' if left < 0 else 'var(--series-left)' }}"></span> {{ 'Short by' if left < 0 else 'Left' }} <b>{{ (left | abs) | eur }}</b></span>
+  </div>
+</section>
 
-<div class="cards">
-  <div class="card"><div class="label">Salary</div><div class="value">{{ r.salary | eur }}</div></div>
-  <div class="card"><div class="label">Expenses</div><div class="value">{{ current.total_expense | eur }}</div></div>
-  <div class="card"><div class="label">After expenses</div>
-    <div class="value {{ 'pos' if current.after_expense >= 0 else 'neg' }}">{{ current.after_expense | eur }}</div></div>
-  <div class="card"><div class="label">Invested</div><div class="value">{{ r.invested | eur }}</div></div>
-  <div class="card"><div class="label">Left after investing</div>
-    <div class="value {{ 'pos' if current.after_invest >= 0 else 'neg' }}">{{ current.after_invest | eur }}</div></div>
+<div class="grid-2">
+  <section class="card">
+    <div class="card-head">
+      <div><h2>Where it went</h2><div class="sub">{{ current.expenses | length }} categor{{ 'y' if current.expenses | length == 1 else 'ies' }} · {{ total_exp | eur }}</div></div>
+      <a class="link" href="/month/{{ sel_year }}/{{ sel_month }}">Edit {{ icon('arrow-right', 15) }}</a>
+    </div>
+    {% if current.expenses %}
+    {% set top = current.expenses[:7] %}
+    {% set biggest = current.expenses[0].amount or 1 %}
+    <div class="catbars">
+      {% for e in top %}
+      <div class="catbar">
+        <span class="name">{{ e.category }}</span>
+        <span class="amt">{{ e.amount | eur }}<small>{{ '%.0f' % (e.amount / total_exp * 100 if total_exp else 0) }}%</small></span>
+        <div class="bar"><i style="width: {{ '%.1f' % (e.amount / biggest * 100) }}%"></i></div>
+      </div>
+      {% endfor %}
+    </div>
+    {% if current.expenses | length > 7 %}
+    {% set rest = current.expenses[7:] %}
+    <p class="muted small" style="margin-top:10px">+ {{ rest | length }} smaller ({{ (rest | sum(attribute='amount')) | eur }})</p>
+    {% endif %}
+    {% else %}
+    <p class="muted">No expenses planned for this month yet. <a href="/month/{{ sel_year }}/{{ sel_month }}">Plan them</a>.</p>
+    {% endif %}
+  </section>
+
+  <section class="card chartcard" id="yearcard">
+    <div class="card-head"><div><h2>{{ sel_year }} so far</h2><div class="sub">Salary, expenses and investing by month</div></div>
+      <a class="link" href="/year/{{ sel_year }}">Full year {{ icon('arrow-right', 15) }}</a></div>
+    <div class="chart-wrap"><canvas id="trendChart" aria-label="Salary, expenses and invested by month"></canvas></div>
+  </section>
 </div>
 
-{% if current.expenses %}
-<div class="panel">
-  <h2 style="margin-top:0">Expense breakdown</h2>
-  <div class="table-scroll"><table>
-    <thead><tr><th>Category</th><th>Amount</th><th>Share</th></tr></thead>
-    <tbody>
-    {% for e in current.expenses %}
-      <tr><td>{{ e.category }}</td><td>{{ e.amount | eur }}</td>
-        <td class="muted">{{ '%.0f' % (e.amount / current.total_expense * 100 if current.total_expense else 0) }}%</td></tr>
-    {% endfor %}
-    <tr class="total"><td>Total</td><td>{{ current.total_expense | eur }}</td><td></td></tr>
-    </tbody>
-  </table></div>
-</div>
-{% endif %}
 {% else %}
-<div class="notice">
-  Nothing recorded for {{ month_names[sel_month - 1] }} {{ sel_year }} yet.
-  <a href="/month/{{ sel_year }}/{{ sel_month }}">Plan it</a>
-  or <a href="/import">import your Excel sheet</a>.
-</div>
+{% call empty('wallet', 'Nothing recorded for ' ~ month_names[sel_month - 1] ~ ' ' ~ sel_year ~ ' yet', 'Plan the month in a minute: your usual expenses are filled in for you. Or bring in what you already have.') %}
+  <a class="btn" href="/month/{{ sel_year }}/{{ sel_month }}">{{ icon('plus', 16) }} Plan {{ month_names[sel_month - 1] }}</a>
+  <a class="btn btn-soft" href="/import">{{ icon('upload', 16) }} Import data</a>
+{% endcall %}
+{% if trend_json != '[]' %}
+<section class="card chartcard" id="yearcard">
+  <div class="card-head"><div><h2>{{ sel_year }} so far</h2></div></div>
+  <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+</section>
+{% endif %}
 {% endif %}
 
-<div class="panel">
-  <h2 style="margin-top:0">Salary vs expenses &middot; {{ sel_year }}</h2>
-  <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+<div class="grid-2">
+  {% if networth_card %}
+  {% set nw = networth_card %}
+  <a class="card card-link" href="/investments">
+    <div class="card-head"><div><h2>Investments</h2><div class="sub">as of {{ nw.label }}</div></div><span class="link">Open {{ icon('arrow-right', 15) }}</span></div>
+    <div class="bigamount">{{ nw.value | inr }}</div>
+    <div class="row" style="margin-top:8px">
+      <span class="badge {{ 'good' if nw.pct >= 0 else 'bad' }}">{{ '%+.1f' % nw.pct }}% overall</span>
+      <span class="muted small">{{ nw.profit | inr }} {{ 'profit' if nw.profit >= 0 else 'loss' }}</span>
+    </div>
+    {% if nw.spark %}
+    <svg class="spark" viewBox="0 0 {{ nw.spark.w }} {{ nw.spark.h }}" preserveAspectRatio="none" role="img" aria-label="Net worth over the last months">
+      <polygon class="a" points="{{ nw.spark.area }}"/><polyline class="l" points="{{ nw.spark.line }}"/>
+    </svg>
+    {% endif %}
+  </a>
+  {% else %}
+  <div class="card">{% call empty('trending', 'Track your investments', 'Add a monthly snapshot of what your investments are worth and see how they grow.') %}
+    <a class="btn btn-soft" href="/investments">{{ icon('plus', 16) }} Add a snapshot</a>{% endcall %}</div>
+  {% endif %}
+
+  {% if loan_cards %}
+  <a class="card card-link" href="/loans">
+    <div class="card-head"><div><h2>Loans</h2><div class="sub">{{ loan_cards | length }} active</div></div><span class="link">Open {{ icon('arrow-right', 15) }}</span></div>
+    {% for cur, total in loan_totals.items() %}
+    <div class="bigamount" {% if not loop.first %}style="font-size:1.5rem; margin-top:6px"{% endif %}>{{ total | money(cur) }}</div>
+    {% endfor %}
+    <div class="muted small" style="margin-top:4px">still to repay</div>
+    {% if soonest %}
+    <div class="row" style="margin-top:14px"><span class="badge">Next EMI</span>
+      <span class="small"><b>{{ soonest.name }}</b> · {{ soonest.emi | money(soonest.currency) }} on {{ soonest.next_due.strftime('%d %b') }}</span></div>
+    {% endif %}
+    <div class="stack" style="margin-top:14px; gap:10px">
+      {% for c in loan_cards[:3] %}
+      <div><div class="row" style="justify-content:space-between"><span class="small">{{ c.name }}</span><span class="small muted">{{ '%.0f' % (c.progress * 100) }}% repaid</span></div>
+        <div class="progress thin" style="margin-top:5px"><span style="width: {{ '%.1f' % (c.progress * 100) }}%"></span></div></div>
+      {% endfor %}
+    </div>
+  </a>
+  {% else %}
+  <div class="card">{% call empty('loans', 'Got a loan or EMI?', 'See what you still owe, what you will have paid in interest, and what it would take to close it early.') %}
+    <a class="btn btn-soft" href="/loans/new">{{ icon('plus', 16) }} Add a loan</a>{% endcall %}</div>
+  {% endif %}
 </div>
 
-<div class="panel">
-  <h2 style="margin-top:0">Investment net worth (INR)</h2>
-  <div class="chart-wrap"><canvas id="networthChart"></canvas></div>
 </div>
 
-<script src="/static/chart.umd.js"></script>
+<script src="{{ asset('chart.umd.js') }}"></script>
 <script>
 const trend = {{ trend_json | safe }};
-const networth = {{ networth_json | safe }};
-const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-
-Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
-Chart.defaults.color = css('--muted');
-Chart.defaults.borderColor = css('--grid');
-
-if (trend.length) {
-  new Chart(document.getElementById('trendChart'), {
-    type: 'bar',
-    data: {
-      labels: trend.map(t => t.label),
-      datasets: [
-        { label: 'Salary', data: trend.map(t => t.salary), backgroundColor: css('--accent'),
-          borderRadius: 4, maxBarThickness: 26 },
-        { label: 'Expenses', data: trend.map(t => t.expense), backgroundColor: css('--accent-2'),
-          borderRadius: 4, maxBarThickness: 26 },
-        { label: 'Invested', data: trend.map(t => t.invested), backgroundColor: css('--accent-3'),
-          borderRadius: 4, maxBarThickness: 26 },
-      ],
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'top', labels: { boxWidth: 12, boxHeight: 12 } },
-        tooltip: { callbacks: { label: c => ` ${c.dataset.label}: €${c.parsed.y.toLocaleString()}` } },
-      },
-      scales: {
-        y: { beginAtZero: true, ticks: { callback: v => '€' + v.toLocaleString() } },
-        x: { grid: { display: false } },
-      },
-    },
+const card = document.getElementById('yearcard');
+if (!trend.length && card) card.style.display = 'none';
+HisaabUI.mount(() => {
+  const canvas = document.getElementById('trendChart');
+  if (!canvas || !trend.length) return;
+  const css = HisaabUI.css, fmt = HisaabUI.fmt;
+  const bar = (label, key, color) => ({
+    label, data: trend.map(t => t[key]), backgroundColor: color,
+    borderRadius: { topLeft: 6, topRight: 6 }, borderSkipped: false, maxBarThickness: 16,
   });
-} else {
-  document.getElementById('trendChart').closest('.panel').style.display = 'none';
-}
-
-if (networth.length) {
-  new Chart(document.getElementById('networthChart'), {
-    type: 'line',
-    data: {
-      labels: networth.map(n => n.label),
-      datasets: [{
-        label: 'Net worth',
-        data: networth.map(n => n.value),
-        borderColor: css('--accent'), backgroundColor: css('--accent'),
-        borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, tension: 0.25,
-      }],
-    },
+  HisaabUI.chart(canvas, {
+    type: 'bar',
+    data: { labels: trend.map(t => t.label), datasets: [
+      bar('Salary', 'salary', css('--series-1')), bar('Expenses', 'expense', css('--series-2')), bar('Invested', 'invested', css('--series-3')),
+    ]},
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: {
-          label: c => ` Net worth: ₹${c.parsed.y.toLocaleString()}`,
-          afterLabel: c => `Profit: ₹${networth[c.dataIndex].profit.toLocaleString()}`,
-        } },
-      },
+      plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: c => ` ${c.dataset.label}: €${Math.round(c.parsed.y).toLocaleString()}` } } },
       scales: {
-        y: { ticks: { callback: v => '₹' + (v / 100000).toFixed(1) + 'L' } },
+        y: { beginAtZero: true, ticks: { callback: fmt.short('€'), maxTicksLimit: 5 }, grid: { drawTicks: false } },
         x: { grid: { display: false } },
       },
     },
   });
-} else {
-  document.getElementById('networthChart').closest('.panel').style.display = 'none';
-}
+});
 </script>
 {% endblock %}

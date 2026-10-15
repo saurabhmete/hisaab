@@ -1,61 +1,76 @@
 {% extends "base.html" %}
+{% from "_ui.html" import empty %}
 {% block title %}{{ year }} · Hisaab{% endblock %}
 {% block content %}
 
-<h1>{{ year }} overview</h1>
+<a class="back" href="/years">{{ icon('arrow-left', 16) }} History</a>
+<div class="page-head">
+  <div><h1>{{ year }}</h1><p class="sub">{{ months | length }} month{{ 's' if months | length != 1 }} tracked. Click a month to edit it.</p></div>
+  <div class="actions">
+    <a class="btn" href="/month/{{ year }}/{{ months[-1].month + 1 if months and months[-1].month < 12 else (months[-1].month if months else 1) }}">{{ icon('plus', 16) }} Add a month</a>
+  </div>
+</div>
 
 {% if months %}
-<div class="panel">
-  <div class="table-scroll"><table>
+<section class="card">
+  <div class="table-wrap"><table class="sticky-first">
     <thead>
       <tr>
         <th></th>
-        {% for m in months %}
-        <th><a href="/month/{{ year }}/{{ m.month }}">{{ month_names[m.month - 1][:3] }}</a></th>
-        {% endfor %}
+        <th class="tot">Year</th>
+        {% for m in months %}<th><a href="/month/{{ year }}/{{ m.month }}">{{ month_names[m.month - 1][:3] }}</a></th>{% endfor %}
       </tr>
     </thead>
     <tbody>
       <tr>
-        <td><strong>Salary</strong></td>
-        {% for m in months %}<td>{{ m.salary | eur }}</td>{% endfor %}
+        <td><b>Salary</b></td>
+        <td class="tot"><b>{{ (months | sum(attribute='salary')) | eur }}</b></td>
+        {% for m in months %}<td><b>{{ m.salary | eur }}</b></td>{% endfor %}
       </tr>
       {% for c in categories %}
+      {% set ns = namespace(t=0) %}
+      {% for m in months %}{% if (c, m.month) in grid %}{% set ns.t = ns.t + grid[(c, m.month)] %}{% endif %}{% endfor %}
       <tr>
-        <td>{{ c }}</td>
+        <td class="muted">{{ c }}</td>
+        <td class="tot">{{ ns.t | eur }}</td>
         {% for m in months %}
-        <td>{% if (c, m.month) in grid %}{{ grid[(c, m.month)] | eur }}{% else %}<span class="muted">—</span>{% endif %}</td>
+        {% if (c, m.month) in grid %}<td>{{ grid[(c, m.month)] | eur }}</td>{% else %}<td class="muted">·</td>{% endif %}
         {% endfor %}
       </tr>
       {% endfor %}
+      {% set exp = namespace(t=0) %}
+      {% for m in months %}{% set exp.t = exp.t + summaries[m.month].total_expense %}{% endfor %}
+      {% set total_salary = months | sum(attribute='salary') %}
+      {% set total_invested = months | sum(attribute='invested') %}
+      {% set rest = total_salary - exp.t - total_invested %}
       <tr class="total">
-        <td>Total expense</td>
+        <td>Total expenses</td>
+        <td class="tot">{{ exp.t | eur }}</td>
         {% for m in months %}<td>{{ summaries[m.month].total_expense | eur }}</td>{% endfor %}
       </tr>
       <tr>
-        <td>After expenses</td>
-        {% for m in months %}
-        {% set v = summaries[m.month].after_expense %}
-        <td class="{{ 'pos' if v >= 0 else 'neg' }}">{{ v | eur }}</td>
-        {% endfor %}
+        <td>Left after expenses</td>
+        <td class="tot {{ 'pos' if (total_salary - exp.t) >= 0 else 'neg' }}">{{ (total_salary - exp.t) | eur }}</td>
+        {% for m in months %}{% set v = summaries[m.month].after_expense %}<td class="{{ 'pos' if v >= 0 else 'neg' }}">{{ v | eur }}</td>{% endfor %}
       </tr>
       <tr>
         <td>Invested</td>
+        <td class="tot">{{ total_invested | eur }}</td>
         {% for m in months %}<td>{{ m.invested | eur }}</td>{% endfor %}
       </tr>
-      <tr>
-        <td>After investing</td>
-        {% for m in months %}
-        {% set v = summaries[m.month].after_invest %}
-        <td class="{{ 'pos' if v >= 0 else 'neg' }}">{{ v | eur }}</td>
-        {% endfor %}
+      <tr class="total">
+        <td>Left after investing</td>
+        <td class="tot {{ 'pos' if rest >= 0 else 'neg' }}">{{ rest | eur }}</td>
+        {% for m in months %}{% set v = summaries[m.month].after_invest %}<td class="{{ 'pos' if v >= 0 else 'neg' }}">{{ v | eur }}</td>{% endfor %}
       </tr>
     </tbody>
   </table></div>
-</div>
+</section>
 {% else %}
-<div class="notice">No months recorded for {{ year }} yet.
-  <a href="/month/{{ year }}/1">Start with January</a>.</div>
+{% call empty('history', 'Nothing recorded for ' ~ year, 'Start with the month you are in, or import what you already have.') %}
+  <a class="btn" href="/month/{{ year }}/1">{{ icon('plus', 16) }} Add January</a>
+  <a class="btn btn-soft" href="/import">{{ icon('upload', 16) }} Import data</a>
+{% endcall %}
 {% endif %}
 
 {% endblock %}

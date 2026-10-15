@@ -2,70 +2,75 @@
 {% block title %}Add loan · Hisaab{% endblock %}
 {% block content %}
 
-<div class="month-nav">
-  <a class="navarrow" href="/loans" title="All loans">&larr;</a>
-  <h1>Add a loan</h1>
+<a class="back" href="/loans">{{ icon('arrow-left', 16) }} All loans</a>
+<div class="page-head"><div><h1>Add a loan</h1><p class="sub">Enter the loan as it was first sanctioned. Changes come later.</p></div></div>
+
+<div class="stack">
+{% if error %}<div class="notice error" role="alert">{{ error }}</div>{% endif %}
+<div class="notice">
+  Already paying this loan for a while? <a href="/loans/import"><b>Import it from your lender's statement</b></a> instead,
+  with the full history of installments, EMI changes and rate changes.
 </div>
 
-{% if error %}<div class="notice error">{{ error }}</div>{% endif %}
-<div class="notice info" style="margin-top:0">
-  Already paying this loan for a while? <a href="/loans/import">Import it from your lender's statement</a>
-  instead, with the full history of installments, EMI changes and rate changes.
-</div>
+<form method="post" action="/loans" class="planner">
+  <div class="stack">
+    <section class="card">
+      <div class="sec-title"><span class="step-num">1</span><h2>The loan</h2></div>
+      <div class="form-grid">
+        <label class="field">Name
+          <input name="name" value="{{ form.name or '' }}" placeholder="e.g. Home loan" required autofocus>
+        </label>
+        <label class="field">Lender <span class="hint">optional</span>
+          <input name="lender" value="{{ form.lender or '' }}" placeholder="e.g. HDFC">
+        </label>
+        <label class="field">Currency
+          <select name="currency" id="currency">
+            {% for code, sym in currencies.items() %}
+            <option value="{{ code }}" {% if (form.currency or 'EUR') == code %}selected{% endif %}>{{ code }} ({{ sym.strip() }})</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="field">Loan amount
+          <input type="number" step="0.01" min="0" name="principal" id="principal" value="{{ form.principal or '' }}" required inputmode="decimal">
+        </label>
+        <label class="field">Start date
+          <input type="date" name="start_date" value="{{ form.start_date or '' }}" required>
+          <span class="hint">The first EMI falls one month after this date.</span>
+        </label>
+      </div>
+    </section>
 
-<form method="post" action="/loans" class="panel loanform">
-  <h2>The loan</h2>
-  <div class="formgrid">
-    <label class="field">Name
-      <input name="name" value="{{ form.name or '' }}" placeholder="e.g. Home loan" required autofocus>
-    </label>
-    <label class="field"><span>Lender <span class="muted">(optional)</span></span>
-      <input name="lender" value="{{ form.lender or '' }}" placeholder="e.g. HDFC">
-    </label>
-    <label class="field">Currency
-      <select name="currency" id="currency">
-        {% for code, sym in currencies.items() %}
-        <option value="{{ code }}" {% if (form.currency or 'EUR') == code %}selected{% endif %}>{{ code }} ({{ sym.strip() }})</option>
-        {% endfor %}
-      </select>
-    </label>
-    <label class="field">Loan amount
-      <input type="number" step="0.01" min="0" name="principal" id="principal" value="{{ form.principal or '' }}" required>
-    </label>
-    <label class="field">Start date
-      <input type="date" name="start_date" value="{{ form.start_date or '' }}" required>
-      <span class="muted hint">The first EMI falls one month after this date.</span>
-    </label>
+    <section class="card">
+      <div class="sec-title"><span class="step-num">2</span><h2>The terms</h2></div>
+      <div class="form-grid three">
+        <label class="field">Interest rate <span class="hint">% per year</span>
+          <input type="number" step="0.001" min="0" name="rate" id="rate" value="{{ form.rate if form.rate != '' and form.rate is not none else '' }}" required inputmode="decimal">
+        </label>
+        <label class="field">Tenure <span class="hint" id="tenurehint">months (12 = 1 year)</span>
+          <input type="number" step="1" min="1" name="tenure_months" id="tenure" value="{{ form.tenure_months or '' }}" placeholder="e.g. 240">
+        </label>
+        <label class="field">EMI per month <span class="hint">leave blank to calculate</span>
+          <input type="number" step="0.01" min="0" name="emi" id="emi" value="{{ form.emi or '' }}" placeholder="auto" inputmode="decimal">
+        </label>
+      </div>
+      <label class="field" style="margin-top:16px">Notes <span class="hint">optional: account number, loan type…</span>
+        <input name="notes" value="{{ form.notes or '' }}">
+      </label>
+    </section>
   </div>
 
-  <h2>Terms</h2>
-  <div class="formgrid three">
-    <label class="field">Interest rate (% per year)
-      <input type="number" step="0.001" min="0" name="rate" id="rate" value="{{ form.rate if form.rate != '' and form.rate is not none else '' }}" required>
-    </label>
-    <label class="field">Tenure (months)
-      <input type="number" step="1" min="1" name="tenure_months" id="tenure" value="{{ form.tenure_months or '' }}" placeholder="e.g. 240">
-      <span class="muted hint" id="tenurehint">12 months = 1 year</span>
-    </label>
-    <label class="field"><span>EMI per month <span class="muted">(optional)</span></span>
-      <input type="number" step="0.01" min="0" name="emi" id="emi" value="{{ form.emi or '' }}" placeholder="auto-calculated">
-      <span class="muted hint" id="emihint">Leave blank to calculate it from amount, rate and tenure.</span>
-    </label>
-  </div>
-
-  <label class="field" style="margin-top:0.9rem"><span>Notes <span class="muted">(optional)</span></span>
-    <input name="notes" value="{{ form.notes or '' }}" placeholder="account number, loan type, …">
-  </label>
-
-  <div style="margin-top:1.1rem; display:flex; gap:0.6rem; flex-wrap:wrap">
-    <button type="submit">Create loan</button>
-    <a class="btn secondary" href="/loans">Cancel</a>
-  </div>
-  <p class="muted small" style="margin-bottom:0">
-    This is the loan as originally sanctioned. If the EMI or rate changed later, add those
-    changes with their dates on the loan's page after creating it.
-  </p>
+  <aside class="planner-aside">
+    <section class="card payoff">
+      <div class="muted small" style="font-weight:600">Your EMI would be about</div>
+      <div class="bigamount" id="emipreview" style="margin-top:6px">—</div>
+      <p class="muted small" id="emihint" style="margin-top:8px">Fill in the amount, rate and tenure to see it. It is used if you leave the EMI blank.</p>
+      <button class="btn btn-block" type="submit" style="margin-top:18px">{{ icon('check', 17) }} Create loan</button>
+      <a class="btn btn-ghost btn-block" href="/loans" style="margin-top:8px">Cancel</a>
+    </section>
+    <p class="muted small">If the EMI or rate changed later, add those changes with their dates on the loan's page after creating it.</p>
+  </aside>
 </form>
+</div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -74,15 +79,20 @@ function preview() {
   const p = parseFloat($('principal').value), r = parseFloat($('rate').value), n = parseInt($('tenure').value, 10);
   const sym = SYMBOLS[$('currency').value] || '';
   $('tenurehint').textContent = n > 0
-    ? `${n} months = ${Math.floor(n / 12)} yr${n % 12 ? ' ' + (n % 12) + ' mo' : ''}` : '12 months = 1 year';
+    ? `${Math.floor(n / 12)} yr${n % 12 ? ' ' + (n % 12) + ' mo' : ''}` : 'months (12 = 1 year)';
   if (p > 0 && r >= 0 && n > 0) {
     const m = r / 1200;
     const emi = m === 0 ? p / n : p * m * Math.pow(1 + m, n) / (Math.pow(1 + m, n) - 1);
-    $('emihint').textContent = `Calculated EMI ≈ ${sym}${emi.toLocaleString(undefined, {maximumFractionDigits: 2})} (used if left blank)`;
+    $('emipreview').textContent = sym + emi.toLocaleString(undefined, {maximumFractionDigits: 2});
+    $('emipreview').classList.remove('muted');
+    $('emihint').textContent = `Over ${n} months, ${sym}${(emi * n - p).toLocaleString(undefined, {maximumFractionDigits: 0})} of it is interest.`;
   } else {
-    $('emihint').textContent = 'Leave blank to calculate it from amount, rate and tenure.';
+    $('emipreview').textContent = 'Not yet';
+    $('emipreview').classList.add('muted');
+    $('emihint').textContent = 'Fill in the amount, rate and tenure to see it. It is used if you leave the EMI blank.';
   }
 }
+$('emipreview').classList.add('muted');
 ['principal', 'rate', 'tenure', 'currency'].forEach(id => $(id).addEventListener('input', preview));
 preview();
 </script>

@@ -4,98 +4,115 @@
 {% set cur = loan.currency %}
 {% set s = summary %}
 
-<div class="month-nav">
-  <a class="navarrow" href="/loans" title="All loans">&larr;</a>
-  <h1>{{ loan.name }}</h1>
-  {% if s.closed %}<span class="badge good">Closed</span>{% else %}<span class="badge">Active</span>{% endif %}
-  {% if loan.lender %}<span class="muted small">{{ loan.lender }}</span>{% endif %}
+<a class="back" href="/loans">{{ icon('arrow-left', 16) }} All loans</a>
+<div class="page-head">
+  <div>
+    <div class="row" style="gap:12px">
+      <h1>{{ loan.name }}</h1>
+      {% if s.closed %}<span class="badge good">Closed</span>{% else %}<span class="badge">Active</span>{% endif %}
+    </div>
+    <p class="sub">{% if loan.lender %}{{ loan.lender }} · {% endif %}{{ cur }} · started {{ loan.start_date }}</p>
+  </div>
+  {% if not s.closed %}
+  <div class="actions"><a class="btn btn-soft" href="#payoff" data-tab-link="payoff">{{ icon('calculator', 16) }} Pay off early</a></div>
+  {% endif %}
 </div>
 
-{% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+<div class="stack">
+
+{% if error %}<div class="notice error" role="alert">{{ error }}</div>{% endif %}
 {% if s.never_clears %}
 <div class="notice error">
   The current EMI doesn't even cover the monthly interest, so this loan would never be repaid.
-  Record the correct EMI under <em>EMI history</em> below.
+  Record the correct EMI under <a href="#history" data-tab-link="history">EMI &amp; rate history</a>.
 </div>
 {% endif %}
 
-{% if s.has_statement %}
-<div class="notice info" style="margin-top:0">
-  Installments up to <strong>{{ s.statement_until.strftime('%d %b %Y') }}</strong> come from your lender's statement and
-  are kept exactly as recorded. EMI and rate changes, and prepayments, dated after that move the projection.
-</div>
-{% endif %}
-
-<div class="cards six">
-  <div class="card"><div class="label">Outstanding principal</div>
-    <div class="value">{{ s.outstanding | money(cur) }}</div>
-    <div class="sub">of {{ loan.principal | money(cur) }} borrowed{% if s.capitalized %} + {{ s.capitalized | money(cur) }} interest added{% endif %}</div></div>
-  <div class="card"><div class="label">Principal repaid</div>
-    <div class="value">{{ s.principal_repaid | money(cur) }}</div>
-    <div class="sub">{{ '%.1f' % (s.progress * 100) }}%{% if s.prepaid_total %} · incl. {{ s.prepaid_total | money(cur) }} prepaid{% endif %}</div></div>
-  <div class="card"><div class="label">Interest paid so far</div>
-    <div class="value">{{ s.interest_paid | money(cur) }}</div>
-    <div class="sub">over {{ s.emis_paid }} EMI{{ 's' if s.emis_paid != 1 }}</div></div>
-  <div class="card"><div class="label">Current EMI</div>
-    <div class="value">{{ s.current_emi | money(cur, 2) }}</div>
-    <div class="sub">{% if s.next %}next {{ s.next.due.strftime('%d %b %Y') }}{% else %}no EMI left{% endif %}</div></div>
-  <div class="card"><div class="label">Interest rate</div>
-    <div class="value">{{ '%g' % s.current_rate }}%</div><div class="sub">per year</div></div>
-  <div class="card"><div class="label">Remaining</div>
-    <div class="value">{{ s.emis_left }} EMI{{ 's' if s.emis_left != 1 }}</div>
-    <div class="sub">{% if s.end_date and not s.closed %}ends {{ s.end_date.strftime('%b %Y') }}{% elif s.closed %}fully repaid{% else %}—{% endif %}</div></div>
+<div class="tabs" data-tabs data-default="overview" {% if closing or closing_error %}data-start="payoff"{% endif %} role="tablist" aria-label="Loan sections">
+  <button class="tab" role="tab" data-tab="overview">Overview</button>
+  {% if not s.closed %}<button class="tab" role="tab" data-tab="payoff">Pay off early</button>{% endif %}
+  <button class="tab" role="tab" data-tab="history">EMI &amp; rate history</button>
+  <button class="tab" role="tab" data-tab="schedule">Schedule</button>
+  <button class="tab" role="tab" data-tab="settings">Settings</button>
 </div>
 
-<div class="panel">
-  <div class="progress big" role="progressbar" aria-valuenow="{{ '%.0f' % (s.progress * 100) }}" aria-valuemin="0" aria-valuemax="100">
-    <span style="width: {{ '%.1f' % (s.progress * 100) }}%"></span>
+<!-- ============ Overview ============ -->
+<section class="stack" data-panel="overview">
+  {% if s.has_statement %}
+  <div class="notice">
+    Installments up to <b>{{ s.statement_until.strftime('%d %b %Y') }}</b> come from your lender's statement and are kept exactly as recorded.
+    EMI and rate changes, and prepayments, dated after that move the projection.
   </div>
-  <div class="kv">
-    <div><span class="muted small">Started</span><br><strong>{{ loan.start_date }}</strong></div>
-    <div><span class="muted small">Total interest over the loan</span><br><strong>{{ s.total_interest | money(cur) }}</strong></div>
-    <div><span class="muted small">Total payable</span><br><strong>{{ s.total_payable | money(cur) }}</strong></div>
-    {% if s.capitalized %}
-    <div title="Interest that was not paid when due and was added to the principal"><span class="muted small">Interest added to principal</span><br><strong>{{ s.capitalized | money(cur) }}</strong></div>
-    {% endif %}
-    <div><span class="muted small">Projected end</span><br>
-      <strong>{% if s.end_date %}{{ s.end_date.strftime('%b %Y') }}{% else %}—{% endif %}</strong>
-      {% if s.months_ahead is not none %}
-      <span class="small {{ 'pos' if s.months_ahead >= 0 else 'neg' }}">
-        {% if s.months_ahead > 0 %}{{ s.months_ahead }} mo ahead of plan
-        {% elif s.months_ahead < 0 %}{{ -s.months_ahead }} mo behind plan
-        {% else %}on plan{% endif %}
-      </span>
-      {% endif %}</div>
-  </div>
-  {% if loan.notes %}<p class="muted small" style="margin-bottom:0">{{ loan.notes }}</p>{% endif %}
-</div>
+  {% endif %}
 
+  <div class="stats six">
+    <div class="stat"><div class="label">Still to repay</div><div class="value">{{ s.outstanding | money(cur) }}</div>
+      <div class="sub">of {{ loan.principal | money(cur) }} borrowed{% if s.capitalized %} + {{ s.capitalized | money(cur) }} interest added{% endif %}</div></div>
+    <div class="stat"><div class="label">Principal repaid</div><div class="value">{{ s.principal_repaid | money(cur) }}</div>
+      <div class="sub">{{ '%.1f' % (s.progress * 100) }}%{% if s.prepaid_total %} · incl. {{ s.prepaid_total | money(cur) }} prepaid{% endif %}</div></div>
+    <div class="stat"><div class="label">Interest paid so far</div><div class="value">{{ s.interest_paid | money(cur) }}</div>
+      <div class="sub">over {{ s.emis_paid }} EMI{{ 's' if s.emis_paid != 1 }}</div></div>
+    <div class="stat"><div class="label">Current EMI</div><div class="value">{{ s.current_emi | money(cur, 2) }}</div>
+      <div class="sub">{% if s.next %}next {{ s.next.due.strftime('%d %b %Y') }}{% else %}no EMI left{% endif %}</div></div>
+    <div class="stat"><div class="label">Interest rate</div><div class="value">{{ '%g' % s.current_rate }}%</div><div class="sub">per year</div></div>
+    <div class="stat"><div class="label">Remaining</div><div class="value">{{ s.emis_left }} EMI{{ 's' if s.emis_left != 1 }}</div>
+      <div class="sub">{% if s.end_date and not s.closed %}ends {{ s.end_date.strftime('%b %Y') }}{% elif s.closed %}fully repaid{% else %}—{% endif %}</div></div>
+  </div>
+
+  <section class="card">
+    <div class="row" style="justify-content:space-between; margin-bottom:10px">
+      <b>{{ '%.0f' % (s.progress * 100) }}% repaid</b>
+      <span class="muted small">{{ s.principal_repaid | money(cur) }} of {{ (loan.principal + s.capitalized) | money(cur) }}</span>
+    </div>
+    <div class="progress" role="progressbar" aria-valuenow="{{ '%.0f' % (s.progress * 100) }}" aria-valuemin="0" aria-valuemax="100"><span style="width: {{ '%.1f' % (s.progress * 100) }}%"></span></div>
+    <div class="kv" style="margin-top:20px">
+      <div><div class="k">Total interest over the loan</div><div class="v">{{ s.total_interest | money(cur) }}</div></div>
+      <div><div class="k">Total payable</div><div class="v">{{ s.total_payable | money(cur) }}</div></div>
+      {% if s.capitalized %}<div title="Interest that was not paid when due and was added to the principal"><div class="k">Interest added to principal</div><div class="v">{{ s.capitalized | money(cur) }}</div></div>{% endif %}
+      <div><div class="k">Projected end</div>
+        <div class="v">{% if s.end_date %}{{ s.end_date.strftime('%b %Y') }}{% else %}—{% endif %}</div>
+        {% if s.months_ahead is not none %}<div class="small {{ 'pos' if s.months_ahead >= 0 else 'neg' }}" style="font-weight:600">
+          {% if s.months_ahead > 0 %}{{ s.months_ahead }} months ahead of plan{% elif s.months_ahead < 0 %}{{ -s.months_ahead }} months behind plan{% else %}on plan{% endif %}</div>{% endif %}</div>
+    </div>
+    {% if loan.notes %}<hr class="rule"><p class="muted small">{{ loan.notes }}</p>{% endif %}
+  </section>
+
+  {% if rows %}
+  <section class="card chartcard">
+    <div class="card-head"><div><h2>What you still owe, over time</h2><div class="sub">Solid line: installments already due. Dashed: projection at the current EMI and rate.</div></div></div>
+    <div class="chart-wrap"><canvas id="balanceChart" aria-label="Outstanding principal over time"></canvas></div>
+  </section>
+  <section class="card">
+    <div class="card-head"><div><h2>Principal vs interest, per year</h2><div class="sub">Early years go mostly to interest; later years mostly to principal.</div></div></div>
+    <div class="chart-wrap short"><canvas id="yearlyChart" aria-label="Principal and interest per year"></canvas></div>
+  </section>
+  {% endif %}
+</section>
+
+<!-- ============ Pay off early ============ -->
 {% if not s.closed %}
-<div class="panel" id="close">
-  <h2>Close this loan early</h2>
-  <p class="small muted" style="margin-top:0">
-    Pick the day you'd pay everything off. Hisaab assumes every EMI until then is paid on time
-    and works out what clears the loan that day.
-  </p>
-  <form class="inline" method="get" action="/loans/{{ loan.id }}">
-    <label class="field">Pay off on
-      <input type="date" name="close_on" value="{{ close_on }}" required></label>
-    <label class="field"><span>Foreclosure charge % <span class="muted">(optional)</span></span>
-      <input type="number" step="0.01" min="0" max="25" name="close_charge" value="{{ '%g' % close_charge }}" style="width:7rem"></label>
-    <button type="submit">Calculate</button>
-  </form>
+<section class="stack" data-panel="payoff" hidden>
+  <section class="card">
+    <div class="card-head"><div><h2>Close this loan early</h2>
+      <div class="sub">Pick the day you'd pay everything off. Hisaab assumes every EMI until then is paid on time.</div></div></div>
+    <form class="form-row" method="get" action="/loans/{{ loan.id }}">
+      <label class="field">Pay off on
+        <input type="date" name="close_on" value="{{ close_on }}" required></label>
+      <label class="field">Foreclosure charge <span class="hint">optional, % of principal</span>
+        <input type="number" step="0.01" min="0" max="25" name="close_charge" value="{{ '%g' % close_charge }}"></label>
+      <div class="field auto"><button class="btn" type="submit">{{ icon('calculator', 16) }} Calculate</button></div>
+    </form>
+  </section>
 
   {% if closing_error %}
-  <div class="notice error" style="margin-bottom:0">{{ closing_error }}</div>
+  <div class="notice error" role="alert">{{ closing_error }}</div>
   {% elif closing and closing.closed %}
-  <div class="notice" style="margin-bottom:0">
-    On the current plan this loan is already fully repaid before {{ closing.on.strftime('%d %b %Y') }}, so there is nothing left to pay.
-  </div>
+  <div class="notice success">On the current plan this loan is already fully repaid before {{ closing.on.strftime('%d %b %Y') }}, so there is nothing left to pay.</div>
   {% elif closing %}
-  <div style="margin-top:1rem">
-    <div class="muted small">To close this loan on {{ closing.on.strftime('%d %b %Y') }} you pay</div>
-    <div class="bigamount">{{ closing.total | money(cur, 2) }}</div>
-    <div class="ledger" style="margin-top:0.6rem">
+  <section class="payoff">
+    <div class="muted small" style="font-weight:600">To close this loan on {{ closing.on.strftime('%d %b %Y') }} you pay</div>
+    <div class="bigamount" style="margin-top:6px">{{ closing.total | money(cur, 2) }}</div>
+    <div class="ledger" style="margin-top:18px; max-width:520px">
       <div class="ledger-row"><span>Outstanding principal</span><span>{{ closing.principal | money(cur, 2) }}</span></div>
       <div class="ledger-row"><span>
         {% if closing.on_due_date %}Interest for the month ending that day{% else %}Interest for {{ closing.days }} days since {{ closing.since.strftime('%d %b') }}{% endif %}
@@ -104,265 +121,207 @@
       {% if closing.charge_pct %}
       <div class="ledger-row"><span>Foreclosure charge ({{ '%g' % closing.charge_pct }}%)</span><span>{{ closing.charge | money(cur, 2) }}</span></div>
       {% endif %}
-      <div class="ledger-row rule final"><span>Total to pay</span><span>{{ closing.total | money(cur, 2) }}</span></div>
+      <div class="ledger-row rule"><span>Total to pay</span><span>{{ closing.total | money(cur, 2) }}</span></div>
     </div>
-    <p class="small muted" style="margin-bottom:0">
-      Includes the EMI due that day if there is one, so don't pay it separately.
-      By then {{ closing.emis_before }} EMI{{ 's' if closing.emis_before != 1 }} will have been paid.
-      Paying off then avoids about <strong>{{ closing.interest_saved | money(cur) }}</strong> of future interest.
+    <p class="small muted" style="margin-top:16px">
+      Includes the EMI due that day if there is one, so don't pay it separately. By then {{ closing.emis_before }} EMI{{ 's' if closing.emis_before != 1 }} will have been paid.
+      Paying off then avoids about <b>{{ closing.interest_saved | money(cur) }}</b> of future interest.
       This is an estimate: lenders count days and add charges and taxes their own way, so ask for the official foreclosure letter before paying.
     </p>
-  </div>
+  </section>
   {% endif %}
-</div>
+</section>
 {% endif %}
 
-{% if rows %}
-<div class="panel">
-  <h2>Outstanding principal over time</h2>
-  <p class="small muted" style="margin-top:0">Solid line: installments already due. Dashed: projection at the current EMI and rate.</p>
-  <div class="chart-wrap"><canvas id="balanceChart"></canvas></div>
-</div>
-<div class="panel">
-  <h2>Principal vs interest per year</h2>
-  <p class="small muted" style="margin-top:0">Early years go mostly to interest; later years mostly to principal.</p>
-  <div class="chart-wrap short"><canvas id="yearlyChart"></canvas></div>
-</div>
-{% endif %}
-
-<div class="chart-grid">
-  <div class="panel">
-    <h2>EMI history</h2>
-    <div class="table-scroll"><table class="periods">
-      <thead><tr><th>From</th><th>To</th><th>EMI</th><th></th></tr></thead>
-      <tbody>
-      {% for e in emi_timeline %}
-        <tr {% if e.current %}class="current"{% endif %}>
-          <td>{{ e.start }}</td>
-          <td>{% if e.end %}{{ e.end }}{% else %}<span class="muted">ongoing</span>{% endif %}</td>
-          <td>{{ e.value | money(cur, 2) }}</td>
-          <td style="width:1%">
-            {% if emi_timeline | length > 1 %}
-            <form method="post" action="/loans/{{ loan.id }}/emi/{{ e.id }}/delete" onsubmit="return confirm('Remove this EMI entry?')">
-              <button class="danger" type="submit" title="Remove">&#10005;</button></form>
-            {% endif %}
-          </td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table></div>
-    <h2 class="small" style="margin-bottom:0.3rem">EMI changed</h2>
-    <form class="inline" method="post" action="/loans/{{ loan.id }}/emi">
-      <label class="field">From
-        <input type="date" name="start_date" value="{{ today.isoformat() }}" required></label>
-      <label class="field"><span>Until <span class="muted">(optional)</span></span>
-        <input type="date" name="end_date"></label>
-      <label class="field">New EMI
-        <input type="number" step="0.01" min="0.01" name="amount" required style="width:7.5rem"></label>
-      <button type="submit">Record</button>
-    </form>
-    <p class="muted small" style="margin-bottom:0">Leave <em>Until</em> empty if the new EMI continues from that date. Set it for a temporary EMI &mdash; the previous amount resumes the day after.</p>
-  </div>
-
-  <div class="panel">
-    <h2>Interest rate history</h2>
-    <div class="table-scroll"><table class="periods">
-      <thead><tr><th>From</th><th>To</th><th>Rate</th><th></th></tr></thead>
-      <tbody>
-      {% for r in rate_timeline %}
-        <tr {% if r.current %}class="current"{% endif %}>
-          <td>{{ r.start }}</td>
-          <td>{% if r.end %}{{ r.end }}{% else %}<span class="muted">ongoing</span>{% endif %}</td>
-          <td>{{ '%g' % r.value }}%</td>
-          <td style="width:1%">
-            {% if rate_timeline | length > 1 %}
-            <form method="post" action="/loans/{{ loan.id }}/rate/{{ r.id }}/delete" onsubmit="return confirm('Remove this rate entry?')">
-              <button class="danger" type="submit" title="Remove">&#10005;</button></form>
-            {% endif %}
-          </td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table></div>
-    <h2 class="small" style="margin-bottom:0.3rem">Rate changed</h2>
-    <form class="inline" method="post" action="/loans/{{ loan.id }}/rate">
-      <label class="field">From
-        <input type="date" name="start_date" value="{{ today.isoformat() }}" required></label>
-      <label class="field"><span>Until <span class="muted">(optional)</span></span>
-        <input type="date" name="end_date"></label>
-      <label class="field">New rate (% p.a.)
-        <input type="number" step="0.001" min="0" name="rate" required style="width:7.5rem"></label>
-      <button type="submit">Record</button>
-    </form>
-    <p class="muted small" style="margin-bottom:0">For a floating rate, set <em>From</em> and <em>Until</em> and the previous rate resumes the day after. Leave <em>Until</em> empty for a permanent change. If your lender also changed the EMI, record that under EMI history; if it kept the EMI, the loan just gets shorter or longer.</p>
-  </div>
-</div>
-
-<div class="panel">
-  <h2>Prepayments</h2>
-  <p class="small muted" style="margin-top:0">Extra part-payments toward the principal, on top of the regular EMI. Interest is recalculated from the day you paid.</p>
-  {% if prepayments %}
-  <div class="table-scroll"><table>
-    <thead><tr><th>Date</th><th>Amount</th><th style="text-align:left">Note</th><th></th></tr></thead>
-    <tbody>
-    {% for p in prepayments %}
-      <tr>
-        <td>{{ p.date }}</td><td>{{ p.amount | money(cur, 2) }}</td>
-        <td style="text-align:left" class="muted">{{ p.note }}</td>
-        <td style="width:1%">
-          <form method="post" action="/loans/{{ loan.id }}/prepay/{{ p.id }}/delete" onsubmit="return confirm('Remove this prepayment?')">
-            <button class="danger" type="submit" title="Remove">&#10005;</button></form>
-        </td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table></div>
-  {% endif %}
-  <form class="inline" method="post" action="/loans/{{ loan.id }}/prepay" style="margin-top:0.6rem">
-    <label class="field">Date
-      <input type="date" name="date" value="{{ today.isoformat() }}" required></label>
-    <label class="field">Amount
-      <input type="number" step="0.01" min="0.01" name="amount" required style="width:8rem"></label>
-    <label class="field"><span>Note <span class="muted">(optional)</span></span>
-      <input name="note" placeholder="e.g. bonus" style="width:11rem"></label>
-    <button type="submit">Add prepayment</button>
-  </form>
-</div>
-
-{% if rows %}
-<details class="panel schedule">
-  <summary>Full repayment schedule ({{ rows | length }} installments)</summary>
-  <div class="table-scroll" style="margin-top:0.6rem"><table>
-    <thead><tr>
-      <th>#</th><th>Due</th><th>EMI</th><th>Principal</th><th>Interest</th>
-      {% set has_prepay = rows | selectattr('prepaid') | list | length > 0 %}
-      {% set has_cap = rows | selectattr('capitalized') | list | length > 0 %}
-      {% if has_prepay %}<th>Prepaid</th>{% endif %}
-      {% if has_cap %}<th>Added to principal</th>{% endif %}
-      <th>Balance</th><th></th>
-    </tr></thead>
-    <tbody>
-    {% for r in rows %}
-      <tr class="{{ 'paidrow' if r.paid else '' }} {{ 'nextrow' if s.next and s.next.n == r.n else '' }}">
-        <td>{{ r.n }}</td>
-        <td style="text-align:left">{{ r.due.strftime('%d %b %Y') }}</td>
-        <td>{{ r.emi | money(cur, 2) }}</td>
-        <td>{{ r.principal | money(cur, 2) }}</td>
-        <td>{{ r.interest | money(cur, 2) }}</td>
-        {% if has_prepay %}<td>{{ r.prepaid | money(cur, 2) if r.prepaid else '' }}</td>{% endif %}
-        {% if has_cap %}<td>{{ r.capitalized | money(cur, 2) if r.capitalized else '' }}</td>{% endif %}
-        <td>{{ r.closing | money(cur, 2) }}</td>
-        <td class="muted small" style="text-align:left">{% if r.recorded %}statement{% elif r.paid %}paid{% elif s.next and s.next.n == r.n %}next{% endif %}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table></div>
-</details>
-{% endif %}
-
-<details class="panel">
-  <summary>Edit loan details</summary>
-  <form method="post" action="/loans/{{ loan.id }}/edit" style="margin-top:0.8rem">
-    <div class="formgrid">
-      <label class="field">Name <input name="name" value="{{ loan.name }}" required></label>
-      <label class="field">Lender <input name="lender" value="{{ loan.lender }}"></label>
-      <label class="field">Currency
-        <select name="currency">
-          {% for code, sym in currencies.items() %}
-          <option value="{{ code }}" {% if cur == code %}selected{% endif %}>{{ code }} ({{ sym.strip() }})</option>
-          {% endfor %}
-        </select></label>
-      <label class="field">Loan amount
-        <input type="number" step="0.01" min="0.01" name="principal" value="{{ '%g' % loan.principal }}" required></label>
-      <label class="field">Start date <input type="date" name="start_date" value="{{ loan.start_date }}" required></label>
-      <label class="field">Original tenure (months)
-        <input type="number" min="1" name="tenure_months" value="{{ loan.tenure_months or '' }}"></label>
-    </div>
-    <label class="field" style="margin-top:0.8rem"><span>When a rate change takes effect on an EMI date, apply it</span>
-      <select name="rate_applies">
-        {% for key, text in rate_timings.items() %}
-        <option value="{{ key }}" {% if loan.rate_applies == key %}selected{% endif %}>{{ text }}</option>
+<!-- ============ History ============ -->
+<section class="stack" data-panel="history" hidden>
+  <div class="grid-2">
+    <section class="card">
+      <div class="card-head"><div><h2>EMI history</h2><div class="sub">The amount you pay each month, and when it changed</div></div></div>
+      <div class="table-wrap"><table class="periods">
+        <thead><tr><th>From</th><th class="tl">To</th><th>EMI</th><th></th></tr></thead>
+        <tbody>
+        {% for e in emi_timeline %}
+          <tr {% if e.current %}class="current"{% endif %}>
+            <td>{{ e.start }}</td>
+            <td class="tl">{% if e.end %}{{ e.end }}{% else %}<span class="muted">ongoing</span>{% endif %}</td>
+            <td>{{ e.value | money(cur, 2) }}</td>
+            <td style="width:1%">{% if emi_timeline | length > 1 %}
+              <form method="post" action="/loans/{{ loan.id }}/emi/{{ e.id }}/delete" onsubmit="return confirm('Remove this EMI entry?')">
+                <button class="btn btn-ghost btn-icon btn-sm" type="submit" title="Remove" aria-label="Remove this EMI entry">{{ icon('x', 15) }}</button></form>{% endif %}</td>
+          </tr>
         {% endfor %}
-      </select>
-      <span class="muted hint">Look at how your lender's own interest figures moved after a past rate change. This decides which EMI first uses the new rate, and what a payoff quote between EMIs uses.</span>
-    </label>
-    <label class="field" style="margin-top:0.8rem">Notes <input name="notes" value="{{ loan.notes }}"></label>
-    <div style="margin-top:0.9rem"><button type="submit">Save changes</button></div>
-  </form>
-  <form method="post" action="/loans/{{ loan.id }}/delete" style="margin-top:1.2rem"
-        onsubmit="return confirm('Delete {{ loan.name }} and all its history? This cannot be undone.')">
-    <button class="danger" type="submit" style="border:1px solid var(--border)">Delete this loan</button>
-  </form>
-</details>
+        </tbody>
+      </table></div>
+      <hr class="rule">
+      <h3 class="small" style="font-weight:660; margin-bottom:10px">Did your EMI change?</h3>
+      <form class="form-row" method="post" action="/loans/{{ loan.id }}/emi">
+        <label class="field">From <input type="date" name="start_date" value="{{ today.isoformat() }}" required></label>
+        <label class="field">Until <span class="hint">optional</span><input type="date" name="end_date"></label>
+        <label class="field">New EMI <input type="number" step="0.01" min="0.01" name="amount" required inputmode="decimal"></label>
+        <div class="field auto"><button class="btn" type="submit">Record</button></div>
+      </form>
+      <p class="muted small" style="margin-top:10px">Leave <i>Until</i> empty if the new EMI continues. Set it for a temporary EMI: the previous amount resumes the day after.</p>
+    </section>
 
-<script>
-if (location.search.includes('close_on')) {
-  const el = document.getElementById('close');
-  if (el) el.scrollIntoView({block: 'start'});
-}
-</script>
+    <section class="card">
+      <div class="card-head"><div><h2>Interest rate history</h2><div class="sub">The yearly rate you're charged, and when it changed</div></div></div>
+      <div class="table-wrap"><table class="periods">
+        <thead><tr><th>From</th><th class="tl">To</th><th>Rate</th><th></th></tr></thead>
+        <tbody>
+        {% for r in rate_timeline %}
+          <tr {% if r.current %}class="current"{% endif %}>
+            <td>{{ r.start }}</td>
+            <td class="tl">{% if r.end %}{{ r.end }}{% else %}<span class="muted">ongoing</span>{% endif %}</td>
+            <td>{{ '%g' % r.value }}%</td>
+            <td style="width:1%">{% if rate_timeline | length > 1 %}
+              <form method="post" action="/loans/{{ loan.id }}/rate/{{ r.id }}/delete" onsubmit="return confirm('Remove this rate entry?')">
+                <button class="btn btn-ghost btn-icon btn-sm" type="submit" title="Remove" aria-label="Remove this rate entry">{{ icon('x', 15) }}</button></form>{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+      <hr class="rule">
+      <h3 class="small" style="font-weight:660; margin-bottom:10px">Did the rate change?</h3>
+      <form class="form-row" method="post" action="/loans/{{ loan.id }}/rate">
+        <label class="field">From <input type="date" name="start_date" value="{{ today.isoformat() }}" required></label>
+        <label class="field">Until <span class="hint">optional</span><input type="date" name="end_date"></label>
+        <label class="field">New rate % <input type="number" step="0.001" min="0" name="rate" required inputmode="decimal"></label>
+        <div class="field auto"><button class="btn" type="submit">Record</button></div>
+      </form>
+      <p class="muted small" style="margin-top:10px">For a floating rate, set <i>From</i> and <i>Until</i> and the previous rate resumes the day after. If your lender also changed the EMI, record that too; if it kept the EMI, the loan just gets shorter or longer.</p>
+    </section>
+  </div>
+
+  <section class="card">
+    <div class="card-head"><div><h2>Prepayments</h2><div class="sub">Extra payments toward the principal, on top of the regular EMI. Interest is recalculated from the day you paid.</div></div></div>
+    {% if prepayments %}
+    <div class="table-wrap"><table>
+      <thead><tr><th>Date</th><th>Amount</th><th class="tl">Note</th><th></th></tr></thead>
+      <tbody>
+      {% for p in prepayments %}
+        <tr><td>{{ p.date }}</td><td>{{ p.amount | money(cur, 2) }}</td><td class="tl muted">{{ p.note }}</td>
+          <td style="width:1%"><form method="post" action="/loans/{{ loan.id }}/prepay/{{ p.id }}/delete" onsubmit="return confirm('Remove this prepayment?')">
+            <button class="btn btn-ghost btn-icon btn-sm" type="submit" title="Remove" aria-label="Remove this prepayment">{{ icon('x', 15) }}</button></form></td></tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    <hr class="rule">
+    {% endif %}
+    <form class="form-row" method="post" action="/loans/{{ loan.id }}/prepay">
+      <label class="field">Date <input type="date" name="date" value="{{ today.isoformat() }}" required></label>
+      <label class="field">Amount <input type="number" step="0.01" min="0.01" name="amount" required inputmode="decimal"></label>
+      <label class="field">Note <span class="hint">optional</span><input name="note" placeholder="e.g. bonus"></label>
+      <div class="field auto"><button class="btn" type="submit">{{ icon('plus', 16) }} Add prepayment</button></div>
+    </form>
+  </section>
+</section>
+
+<!-- ============ Schedule ============ -->
+<section class="stack" data-panel="schedule" hidden>
+  {% if rows %}
+  <section class="card">
+    <div class="card-head"><div><h2>Repayment schedule</h2><div class="sub">{{ rows | length }} installments · paid rows are dimmed, the next one is highlighted</div></div></div>
+    <div class="table-wrap"><table class="schedule">
+      <thead><tr>
+        <th>#</th><th class="tl">Due</th><th>EMI</th><th>Principal</th><th>Interest</th>
+        {% set has_prepay = rows | selectattr('prepaid') | list | length > 0 %}
+        {% set has_cap = rows | selectattr('capitalized') | list | length > 0 %}
+        {% if has_prepay %}<th>Prepaid</th>{% endif %}
+        {% if has_cap %}<th>Added to principal</th>{% endif %}
+        <th>Balance</th><th class="tl"></th>
+      </tr></thead>
+      <tbody>
+      {% for r in rows %}
+        <tr class="{{ 'paidrow' if r.paid else '' }} {{ 'nextrow' if s.next and s.next.n == r.n else '' }}">
+          <td>{{ r.n }}</td>
+          <td class="tl">{{ r.due.strftime('%d %b %Y') }}</td>
+          <td>{{ r.emi | money(cur, 2) }}</td>
+          <td>{{ r.principal | money(cur, 2) }}</td>
+          <td>{{ r.interest | money(cur, 2) }}</td>
+          {% if has_prepay %}<td>{{ r.prepaid | money(cur, 2) if r.prepaid else '' }}</td>{% endif %}
+          {% if has_cap %}<td>{{ r.capitalized | money(cur, 2) if r.capitalized else '' }}</td>{% endif %}
+          <td>{{ r.closing | money(cur, 2) }}</td>
+          <td class="tl small muted">{% if r.recorded %}statement{% elif r.paid %}paid{% elif s.next and s.next.n == r.n %}next{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </section>
+  {% else %}
+  <div class="notice">Nothing to show yet.</div>
+  {% endif %}
+</section>
+
+<!-- ============ Settings ============ -->
+<section class="stack" data-panel="settings" hidden>
+  <section class="card">
+    <div class="card-head"><div><h2>Loan details</h2></div></div>
+    <form method="post" action="/loans/{{ loan.id }}/edit" class="stack">
+      <div class="form-grid">
+        <label class="field">Name <input name="name" value="{{ loan.name }}" required></label>
+        <label class="field">Lender <input name="lender" value="{{ loan.lender }}"></label>
+        <label class="field">Currency
+          <select name="currency">{% for code, sym in currencies.items() %}<option value="{{ code }}" {% if cur == code %}selected{% endif %}>{{ code }} ({{ sym.strip() }})</option>{% endfor %}</select></label>
+        <label class="field">Loan amount <input type="number" step="0.01" min="0.01" name="principal" value="{{ '%g' % loan.principal }}" required></label>
+        <label class="field">Start date <input type="date" name="start_date" value="{{ loan.start_date }}" required></label>
+        <label class="field">Original tenure <span class="hint">months</span><input type="number" min="1" name="tenure_months" value="{{ loan.tenure_months or '' }}"></label>
+      </div>
+      <label class="field">When a rate change takes effect on an EMI date, apply it
+        <select name="rate_applies">{% for key, text in rate_timings.items() %}<option value="{{ key }}" {% if loan.rate_applies == key %}selected{% endif %}>{{ text }}</option>{% endfor %}</select>
+        <span class="hint">Look at how your lender's own interest figures moved after a past rate change. This decides which EMI first uses the new rate, and what a payoff quote between EMIs uses.</span>
+      </label>
+      <label class="field">Notes <input name="notes" value="{{ loan.notes }}"></label>
+      <div><button class="btn" type="submit">{{ icon('check', 16) }} Save changes</button></div>
+    </form>
+  </section>
+  <section class="card">
+    <div class="card-head"><div><h2>Delete this loan</h2><div class="sub">Removes the loan with its whole history. This cannot be undone.</div></div></div>
+    <form method="post" action="/loans/{{ loan.id }}/delete" onsubmit="return confirm('Delete {{ loan.name }} and all its history? This cannot be undone.')">
+      <button class="btn btn-danger" type="submit">{{ icon('trash', 16) }} Delete loan</button>
+    </form>
+  </section>
+</section>
+
+</div>
 
 {% if rows %}
-<script src="/static/chart.umd.js"></script>
+<script src="{{ asset('chart.umd.js') }}"></script>
 <script>
 const c = {{ chart_json | safe }};
-const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
-Chart.defaults.color = css('--muted');
-Chart.defaults.borderColor = css('--grid');
-
-const full = v => c.symbol + v.toLocaleString(undefined, {maximumFractionDigits: 0});
-const short = v => {
-  if (c.symbol === '₹') {
-    if (v >= 1e7) return '₹' + (v / 1e7).toFixed(1) + 'Cr';
-    if (v >= 1e5) return '₹' + (v / 1e5).toFixed(1) + 'L';
-    return '₹' + v.toLocaleString();
-  }
-  if (v >= 1e6) return c.symbol + (v / 1e6).toFixed(1) + 'M';
-  if (v >= 1e3) return c.symbol + (v / 1e3).toFixed(0) + 'k';
-  return c.symbol + v;
-};
-const blue = css('--accent'), orange = css('--accent-2');
-
-new Chart(document.getElementById('balanceChart'), {
-  type: 'line',
-  data: { labels: c.labels, datasets: [
-    { label: 'Paid so far', data: c.paid, borderColor: blue, backgroundColor: blue + '22',
-      fill: true, pointRadius: 0, pointHoverRadius: 4, borderWidth: 2, tension: 0.1 },
-    { label: 'Projected', data: c.projected, borderColor: blue, borderDash: [6, 5],
-      fill: false, pointRadius: 0, pointHoverRadius: 4, borderWidth: 2, tension: 0.1 },
-  ]},
-  options: {
-    responsive: true, maintainAspectRatio: false,
-    interaction: { mode: 'index', intersect: false },
-    plugins: {
-      legend: { position: 'top', labels: { boxWidth: 12, boxHeight: 12 } },
-      tooltip: { callbacks: { label: x => ` ${x.dataset.label}: ${full(x.parsed.y)}` } },
+HisaabUI.mount(() => {
+  const css = HisaabUI.css, fmt = HisaabUI.fmt, full = fmt.full(c.symbol), short = fmt.short(c.symbol);
+  const blue = css('--series-1'), orange = css('--series-2');
+  const balance = document.getElementById('balanceChart');
+  if (balance) HisaabUI.chart(balance, {
+    type: 'line',
+    data: { labels: c.labels, datasets: [
+      { label: 'Paid so far', data: c.paid, borderColor: blue, borderWidth: 2.5, fill: true, backgroundColor: HisaabUI.areaFill(blue, 0.26),
+        pointRadius: 0, pointHoverRadius: 5, tension: 0.15 },
+      { label: 'Projected', data: c.projected, borderColor: blue, borderWidth: 2.5, borderDash: [6, 5], fill: false,
+        pointRadius: 0, pointHoverRadius: 5, tension: 0.15 },
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: x => ` ${x.dataset.label}: ${full(x.parsed.y)}` } } },
+      scales: { y: { beginAtZero: true, ticks: { callback: short, maxTicksLimit: 5 }, grid: { drawTicks: false } },
+                x: { grid: { display: false }, ticks: { maxTicksLimit: window.innerWidth < 500 ? 4 : 8, maxRotation: 0 } } },
     },
-    scales: {
-      y: { beginAtZero: true, ticks: { callback: short } },
-      x: { grid: { display: false }, ticks: { maxTicksLimit: window.innerWidth < 500 ? 4 : 8, maxRotation: 0 } },
+  });
+  const yearly = document.getElementById('yearlyChart');
+  if (yearly) HisaabUI.chart(yearly, {
+    type: 'bar',
+    data: { labels: c.yearly.map(y => y.year), datasets: [
+      { label: 'Principal', data: c.yearly.map(y => y.principal), backgroundColor: blue, borderRadius: 5, borderSkipped: false, maxBarThickness: 38 },
+      { label: 'Interest', data: c.yearly.map(y => y.interest), backgroundColor: orange, borderRadius: 5, borderSkipped: false, maxBarThickness: 38 },
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: x => ` ${x.dataset.label}: ${full(x.parsed.y)}` } } },
+      scales: { x: { stacked: true, grid: { display: false }, ticks: { maxTicksLimit: 12 } },
+                y: { stacked: true, beginAtZero: true, ticks: { callback: short, maxTicksLimit: 5 }, grid: { drawTicks: false } } },
     },
-  },
-});
-
-new Chart(document.getElementById('yearlyChart'), {
-  type: 'bar',
-  data: { labels: c.yearly.map(y => y.year), datasets: [
-    { label: 'Principal', data: c.yearly.map(y => y.principal), backgroundColor: blue, borderRadius: 3, maxBarThickness: 36 },
-    { label: 'Interest', data: c.yearly.map(y => y.interest), backgroundColor: orange, borderRadius: 3, maxBarThickness: 36 },
-  ]},
-  options: {
-    responsive: true, maintainAspectRatio: false,
-    plugins: {
-      legend: { position: 'top', labels: { boxWidth: 12, boxHeight: 12 } },
-      tooltip: { callbacks: { label: x => ` ${x.dataset.label}: ${full(x.parsed.y)}` } },
-    },
-    scales: {
-      x: { stacked: true, grid: { display: false }, ticks: { maxTicksLimit: 12 } },
-      y: { stacked: true, beginAtZero: true, ticks: { callback: short } },
-    },
-  },
+  });
 });
 </script>
 {% endif %}

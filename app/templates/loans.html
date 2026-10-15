@@ -1,71 +1,62 @@
 {% extends "base.html" %}
+{% from "_ui.html" import empty %}
 {% block title %}Loans · Hisaab{% endblock %}
 {% block content %}
 
-<div class="month-nav" style="justify-content: space-between; width: 100%">
-  <h1>Loans</h1>
-  <div style="display:flex; gap:0.5rem; flex-wrap:wrap">
-    <a class="btn secondary" href="/loans/import">Import running loan</a>
-    <a class="btn" href="/loans/new">+ Add loan</a>
+<div class="page-head">
+  <div><h1>Loans</h1><p class="sub">What you owe, what it costs and when it ends.</p></div>
+  <div class="actions">
+    <a class="btn btn-soft" href="/loans/import">{{ icon('upload', 16) }} Import a running loan</a>
+    <a class="btn" href="/loans/new">{{ icon('plus', 16) }} Add loan</a>
   </div>
 </div>
 
 {% if items %}
+<div class="stack">
 
-{% if totals %}
-<div class="cards">
-  {% for cur, t in totals.items() %}
-  <div class="card"><div class="label">Outstanding principal ({{ cur }})</div>
-    <div class="value">{{ t.outstanding | money(cur) }}</div></div>
-  <div class="card"><div class="label">Monthly EMIs ({{ cur }})</div>
-    <div class="value">{{ t.emi | money(cur) }}</div></div>
-  {% endfor %}
-</div>
-{% endif %}
+  {% if totals %}
+  <div class="stats">
+    {% for cur, t in totals.items() %}
+    <div class="stat"><div class="label">Still to repay ({{ cur }})</div><div class="value">{{ t.outstanding | money(cur) }}</div></div>
+    <div class="stat"><div class="label">Monthly EMIs ({{ cur }})</div><div class="value">{{ t.emi | money(cur) }}</div></div>
+    {% endfor %}
+  </div>
+  {% endif %}
 
-{% for it in items %}
-{% set ln = it.loan %}{% set s = it.summary %}
-<a href="/loans/{{ ln.id }}" class="loancard">
-  <div class="panel">
-    <div class="loancard-head">
+  <div class="loan-list">
+  {% for it in items %}
+  {% set ln = it.loan %}{% set s = it.summary %}
+  <a href="/loans/{{ ln.id }}" class="card card-link loan-row">
+    <div class="loan-top">
       <div>
         <h2>{{ ln.name }}</h2>
-        {% if ln.lender %}<span class="muted small">{{ ln.lender }}</span>{% endif %}
+        <div class="muted small">{% if ln.lender %}{{ ln.lender }} · {% endif %}{{ ln.currency }}</div>
       </div>
       {% if s.closed %}<span class="badge good">Closed</span>{% else %}<span class="badge">Active</span>{% endif %}
     </div>
-    <div class="loancard-stats">
-      <span><span class="muted small">Outstanding</span><br><strong>{{ s.outstanding | money(ln.currency) }}</strong></span>
-      <span><span class="muted small">EMI</span><br><strong>{{ s.current_emi | money(ln.currency) }}</strong></span>
-      <span><span class="muted small">Rate</span><br><strong>{{ '%g' % s.current_rate }}%</strong></span>
-      <span><span class="muted small">Next EMI</span><br>
-        <strong>{% if s.next %}{{ s.next.due.strftime('%d %b %Y') }}{% else %}—{% endif %}</strong></span>
+    <div class="loan-figures">
+      <div><div class="k">Still to repay</div><div class="v big">{{ s.outstanding | money(ln.currency) }}</div></div>
+      <div><div class="k">EMI</div><div class="v">{{ s.current_emi | money(ln.currency) }}</div></div>
+      <div><div class="k">Rate</div><div class="v">{{ '%g' % s.current_rate }}%</div></div>
+      <div><div class="k">Next EMI</div><div class="v">{% if s.next %}{{ s.next.due.strftime('%d %b %Y') }}{% else %}—{% endif %}</div></div>
     </div>
-    <div class="progress" role="progressbar" aria-valuenow="{{ '%.0f' % (s.progress * 100) }}" aria-valuemin="0" aria-valuemax="100">
-      <span style="width: {{ '%.1f' % (s.progress * 100) }}%"></span>
+    <div>
+      <div class="progress" role="progressbar" aria-valuenow="{{ '%.0f' % (s.progress * 100) }}" aria-valuemin="0" aria-valuemax="100"><span style="width: {{ '%.1f' % (s.progress * 100) }}%"></span></div>
+      <div class="muted small" style="margin-top:8px">
+        {{ '%.0f' % (s.progress * 100) }}% repaid of {{ (ln.principal + s.capitalized) | money(ln.currency) }}
+        {% if not s.closed and s.end_date %}· {{ s.emis_left }} EMIs left · ends {{ s.end_date.strftime('%b %Y') }}{% endif %}
+      </div>
     </div>
-    <div class="muted small" style="margin-top:0.35rem">
-      {{ '%.0f' % (s.progress * 100) }}% repaid of {{ ln.principal | money(ln.currency) }}
-      {% if not s.closed and s.end_date %}· {{ s.emis_left }} EMIs left · ends {{ s.end_date.strftime('%b %Y') }}{% endif %}
-    </div>
+  </a>
+  {% endfor %}
   </div>
-</a>
-{% endfor %}
 
-{% else %}
-<div class="panel">
-  <h2>Track a loan or EMI</h2>
-  <p class="muted" style="margin-top:0">
-    Record the loan amount, start date, interest rate and EMI, and Hisaab works out the
-    outstanding principal, interest paid so far, and the full repayment schedule. When your
-    EMI or rate changes, record the change with its effective date and everything is
-    recalculated. Extra part-payments are supported too.
-  </p>
-  <div style="display:flex; gap:0.5rem; flex-wrap:wrap">
-    <a class="btn" href="/loans/new">+ Add a new loan</a>
-    <a class="btn secondary" href="/loans/import">Import a loan I've been paying for a while</a>
-  </div>
 </div>
+{% else %}
+{% call empty('loans', 'Track a loan or EMI', 'Record the amount, rate and EMI and Hisaab works out what you still owe, the interest you have paid and the full schedule. Changes to the EMI or rate, and extra payments, are all handled.') %}
+  <a class="btn" href="/loans/new">{{ icon('plus', 16) }} Add a new loan</a>
+  <a class="btn btn-soft" href="/loans/import">{{ icon('upload', 16) }} Import one I've been paying for a while</a>
+{% endcall %}
 {% endif %}
 
 {% endblock %}

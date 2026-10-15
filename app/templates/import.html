@@ -2,145 +2,141 @@
 {% block title %}Import · Hisaab{% endblock %}
 {% block content %}
 
-<h1>Import your data</h1>
-<p class="muted" style="margin-top:0">
-  Everything can also be entered directly on the site, so importing is optional. Pick the
-  option that matches how your records look.
-</p>
+<div class="page-head">
+  <div><h1>Import your data</h1>
+    <p class="sub">Everything can also be entered directly on the site, so importing is optional. Pick the option that matches how your records look.</p></div>
+</div>
 
-{% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+<div class="stack">
+
+{% if error %}<div class="notice error" role="alert">{{ error }}</div>{% endif %}
 {% if report %}
-<div class="notice">
-  Import complete:
-  <ul style="margin:0.3rem 0 0">
-  {% for sheet, count in report.items() %}
-    <li><strong>{{ sheet }}</strong> — {{ count }} entries</li>
-  {% endfor %}
-  </ul>
-  <p class="small" style="margin-bottom:0"><a href="/">Go to the dashboard</a></p>
+<div class="notice success" role="status">
+  <b>Import complete</b>
+  <ul>{% for sheet, count in report.items() %}<li>{{ sheet }}: {{ count }}</li>{% endfor %}</ul>
+  <p class="small"><a href="/">Go to the overview {{ icon('arrow-right', 14) }}</a></p>
 </div>
 {% endif %}
 {% if result and result.errors %}
-<div class="notice error">
-  <strong>This file can't be imported yet:</strong>
-  <ul style="margin:0.3rem 0 0">{% for e in result.errors %}<li>{{ e }}</li>{% endfor %}</ul>
-  <p class="small" style="margin-bottom:0">Tell Claude what the errors say and ask it to fix the file, then upload the new one.</p>
+<div class="notice error" role="alert">
+  <b>This file can't be imported yet:</b>
+  <ul>{% for e in result.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+  <p class="small">Tell Claude what the errors say and ask it to fix the file, then upload the new one.</p>
 </div>
 {% endif %}
 
-<div class="panel">
-  <h2>A &middot; I have the Salary Plan spreadsheet</h2>
-  <form class="inline" method="post" action="/import" enctype="multipart/form-data">
-    <label class="field">Workbook (.xlsx)
-      <input type="file" name="file" accept=".xlsx" required>
-    </label>
-    <button type="submit">Import</button>
-  </form>
-  <p class="small muted" style="margin-bottom:0">
-    Months that already exist are overwritten with the workbook's values. The layout it expects is
-    described <a href="#excel-format">further down</a>.
-  </p>
+<div class="tabs" data-tabs data-default="excel" {% if result or pasted %}data-start="assisted"{% endif %} role="tablist" aria-label="Import method">
+  <button class="tab" role="tab" data-tab="excel">I have the Salary Plan spreadsheet</button>
+  <button class="tab" role="tab" data-tab="assisted">My records are in some other form</button>
 </div>
 
-<div class="panel" id="assisted">
-  <h2>B &middot; My records are in some other form</h2>
-  <p class="muted small" style="margin-top:0">
-    Bank or card statements, a spreadsheet laid out differently, another app's export, even notes:
-    give them to Claude together with the prompt below and it converts them into a file Hisaab can read.
-  </p>
+<!-- ============ Excel ============ -->
+<section class="stack" data-panel="excel">
+  <section class="card">
+    <div class="card-head"><div><h2>Upload the workbook</h2>
+      <div class="sub">Months that already exist are overwritten with the workbook's values.</div></div></div>
+    <form method="post" action="/import" enctype="multipart/form-data" class="stack">
+      <label class="dropzone">
+        {{ icon('file', 28) }}
+        <span class="dz-title">Drop the .xlsx here, or click to choose</span>
+        <span class="dz-name"></span>
+        <input type="file" name="file" accept=".xlsx" required aria-label="Excel workbook">
+      </label>
+      <div><button class="btn" type="submit">{{ icon('upload', 16) }} Import workbook</button></div>
+    </form>
+  </section>
 
-  <h2 class="small" style="margin-bottom:0.3rem">1 &middot; Copy the prompt</h2>
-  <textarea id="prompt" class="promptbox" readonly rows="8" aria-label="Prompt for Claude">{{ prompt }}</textarea>
-  <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.6rem">
-    <button type="button" id="copybtn">Copy prompt</button>
-    <button type="button" class="secondary" id="dlbtn">Download as .txt</button>
-    <span class="muted small" id="copied" style="align-self:center"></span>
-  </div>
-  <p class="muted small" style="margin-bottom:0">It already lists your current expense categories, so Claude reuses them instead of inventing near-duplicates.</p>
+  <details class="card format-doc">
+    <summary><span>What layout does it expect?</span>{{ icon('chevron-down', 18, 'chev') }}</summary>
+    <div style="margin-top:16px" class="stack">
+      <div>
+        <h3 class="small" style="font-weight:660; margin-bottom:6px">Year sheets: one per year, named after the year (e.g. <code>2026</code>)</h3>
+        <ul class="small muted" style="margin:0 0 12px; padding-left:1.2rem">
+          <li><b>Row 1:</b> <code>Total Salary</code> in column A, then one salary figure per month.</li>
+          <li><b>Row 2:</b> <code>Expenses</code> in column A, then month names (<code>January</code>, <code>February</code>, …). If the months wrap past December, the wrapped months go into the next year.</li>
+          <li><b>Following rows:</b> one expense category per row: the name in column A, amounts under each month. Empty cells are skipped.</li>
+          <li><b>Optional:</b> a <code>Can Invest</code> row sets the amount invested each month.</li>
+          <li>Rows named <code>Total Expense</code>, <code>Salary Remaining…</code> and <code>Remainder…</code> are ignored; the app works those out.</li>
+        </ul>
+        <div class="table-wrap"><table>
+          <thead><tr><th>A</th><th>B</th><th>C</th><th>…</th></tr></thead>
+          <tbody>
+            <tr><td>Total Salary</td><td>2808</td><td>2808</td><td>…</td></tr>
+            <tr><td>Expenses</td><td>January</td><td>February</td><td>…</td></tr>
+            <tr><td>Rent</td><td>735</td><td>735</td><td>…</td></tr>
+            <tr><td>Grocery</td><td>250</td><td>250</td><td>…</td></tr>
+            <tr><td>Can Invest</td><td>1100</td><td>1100</td><td>…</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div>
+        <h3 class="small" style="font-weight:660; margin-bottom:6px">Investment sheet: any sheet with "Investment" in its name</h3>
+        <ul class="small muted" style="margin:0 0 12px; padding-left:1.2rem">
+          <li><b>Row 1:</b> month names across the columns (assigned to the latest year sheet's year).</li>
+          <li><b>Labeled rows</b> in column A: <code>India Investment Value (Rupees)</code>, <code>India Profit (Rupees)</code>, <code>Germany Investment Value (Euros)</code>, <code>Germany Profit (Euros)</code> and <code>EUR to INR rate</code>.</li>
+          <li>Net worth and profit percentages are recomputed; those rows are ignored.</li>
+        </ul>
+        <div class="table-wrap"><table>
+          <thead><tr><th>A</th><th>B</th><th>C</th><th>…</th></tr></thead>
+          <tbody>
+            <tr><td>Investment</td><td>January</td><td>February</td><td>…</td></tr>
+            <tr><td>India Investment Value (Rupees)</td><td>405901</td><td>416787</td><td>…</td></tr>
+            <tr><td>India Profit (Rupees)</td><td>86511</td><td>78845</td><td>…</td></tr>
+            <tr><td>Germany Investment Value (Euros)</td><td>8765</td><td>9755</td><td>…</td></tr>
+            <tr><td>Germany Profit (Euros)</td><td>345</td><td>349</td><td>…</td></tr>
+            <tr><td>India EUR to INR rate (Rupees)</td><td>110.016</td><td>110.016</td><td>…</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+  </details>
+</section>
 
-  <h2 class="small" style="margin-bottom:0.3rem">2 &middot; Ask Claude</h2>
-  <ol class="steps small">
-    <li>Open a new chat in <strong>Claude</strong> and paste the prompt.</li>
-    <li>Attach your records (PDFs, spreadsheets, CSV or screenshots).</li>
-    <li>Claude will ask you a few questions first, such as what counts as salary or which payments are investments. Answer them; that's what makes the file accurate.</li>
-    <li>Download the <code>hisaab-data.json</code> it gives you, or copy the JSON if it shows a code block.</li>
-  </ol>
-  <p class="muted small" style="margin-top:0">The prompt tells Claude to leave your name, address and account numbers out of the file.</p>
+<!-- ============ Anything else, via Claude ============ -->
+<section class="stack" data-panel="assisted" hidden>
+  <p class="muted small" style="margin:0">Bank or card statements, a spreadsheet laid out differently, another app's export, even notes: give them to Claude with the prompt below and it converts them into a file Hisaab can read. Got a loan? That has its own importer under <a href="/loans/import">Loans</a>.</p>
 
-  <h2 class="small" style="margin-bottom:0.3rem">3 &middot; Upload the file</h2>
-  <form method="post" action="/import/assisted" enctype="multipart/form-data">
-    <label class="field">File from Claude <span class="muted">(.json)</span>
-      <input type="file" name="file" accept=".json,.txt,application/json,text/plain">
-    </label>
-    <p class="muted small" style="margin:0.8rem 0 0.4rem">&hellip;or paste what Claude gave you:</p>
-    <textarea name="pasted" class="promptbox" rows="4" placeholder='{ "format": "hisaab-data-import", … }'>{{ pasted }}</textarea>
-    <div style="margin-top:0.8rem"><button type="submit">Check the file</button></div>
-  </form>
-  <p class="muted small" style="margin-bottom:0">Nothing is saved yet &mdash; you'll see exactly what would change first.
-    Got a loan to bring in? That has its own importer under <a href="/loans/import">Loans</a>.</p>
+  <section class="card">
+    <div class="sec-title"><span class="step-num">1</span><h2>Copy the prompt</h2></div>
+    <textarea id="prompt" class="promptbox" readonly rows="8" aria-label="Prompt for Claude">{{ prompt }}</textarea>
+    <div class="row" style="margin-top:12px">
+      <button type="button" class="btn" data-copy="#prompt" data-note="#copied">{{ icon('copy', 16) }} Copy prompt</button>
+      <button type="button" class="btn btn-soft" data-download="#prompt" data-filename="hisaab-data-import-prompt.txt">{{ icon('download', 16) }} Download .txt</button>
+      <span class="muted small" id="copied" aria-live="polite"></span>
+    </div>
+    <p class="muted small" style="margin-top:10px">It already lists your current expense categories, so Claude reuses them instead of inventing near-duplicates.</p>
+  </section>
+
+  <section class="card">
+    <div class="sec-title"><span class="step-num">2</span><h2>Ask Claude</h2></div>
+    <div class="step" style="grid-template-columns: 1fr"><ol>
+      <li>Open a new chat in <b>Claude</b> and paste the prompt.</li>
+      <li>Attach your records (PDFs, spreadsheets, CSV or screenshots).</li>
+      <li>Claude will ask you a few questions first, such as what counts as salary or which payments are investments. Answer them; that's what makes the file accurate.</li>
+      <li>Download the <code>hisaab-data.json</code> it gives you, or copy the JSON if it shows a code block.</li>
+    </ol></div>
+    <p class="muted small" style="margin-top:12px">The prompt tells Claude to leave your name, address and account numbers out of the file.</p>
+  </section>
+
+  <section class="card">
+    <div class="sec-title"><span class="step-num">3</span><h2>Upload the file</h2></div>
+    <form method="post" action="/import/assisted" enctype="multipart/form-data" class="stack">
+      <label class="dropzone">
+        {{ icon('upload', 28) }}
+        <span class="dz-title">Drop the file here, or click to choose</span>
+        <span class="muted small">The .json file from Claude</span>
+        <span class="dz-name"></span>
+        <input type="file" name="file" accept=".json,.txt,application/json,text/plain" aria-label="Data import file">
+      </label>
+      <details {% if pasted %}open{% endif %}>
+        <summary class="small" style="cursor:pointer; color:var(--brand); font-weight:600">Or paste the JSON instead</summary>
+        <textarea name="pasted" class="promptbox" rows="6" style="margin-top:10px" placeholder='{ "format": "hisaab-data-import", … }'>{{ pasted }}</textarea>
+      </details>
+      <div><button class="btn" type="submit">Check the file {{ icon('arrow-right', 16) }}</button></div>
+    </form>
+    <p class="muted small" style="margin-top:12px">Nothing is saved yet. You'll see exactly what would change first.</p>
+  </section>
+</section>
+
 </div>
-
-<details class="panel format-doc" id="excel-format">
-  <summary>Expected Excel layout for option A</summary>
-
-  <h2 class="small" style="margin-bottom:0.3rem">1 &middot; Year sheets — one per year, named after the year (e.g. <code>2026</code>)</h2>
-  <ul class="small">
-    <li><strong>Row 1:</strong> <code>Total Salary</code> in column A, then one salary figure per month.</li>
-    <li><strong>Row 2:</strong> <code>Expenses</code> in column A, then month names (<code>January</code>, <code>February</code>, …) — one column per month. If the months wrap past December (…Nov, Dec, Jan), the wrapped months are placed in the next year.</li>
-    <li><strong>Following rows:</strong> one expense category per row — the category name in column A, amounts under each month column. Empty cells are skipped.</li>
-    <li><strong>Optional:</strong> a <code>Can Invest</code> row sets the amount invested that month.</li>
-    <li>Rows named <code>Total Expense</code>, <code>Salary Remaining…</code>, and <code>Remainder…</code> are ignored — the app computes those itself.</li>
-  </ul>
-  <div class="table-scroll"><table>
-    <thead><tr><th>A</th><th>B</th><th>C</th><th>…</th></tr></thead>
-    <tbody>
-      <tr><td>Total Salary</td><td>2808</td><td>2808</td><td>…</td></tr>
-      <tr><td>Expenses</td><td>January</td><td>February</td><td>…</td></tr>
-      <tr><td>Rent</td><td>735</td><td>735</td><td>…</td></tr>
-      <tr><td>Grocery</td><td>250</td><td>250</td><td>…</td></tr>
-      <tr><td>Can Invest</td><td>1100</td><td>1100</td><td>…</td></tr>
-    </tbody>
-  </table></div>
-
-  <h2 class="small" style="margin-bottom:0.3rem">2 &middot; Investment sheet — any sheet with "Investment" in its name</h2>
-  <ul class="small">
-    <li><strong>Row 1:</strong> month names across the columns (these months are assigned to the latest year sheet's year).</li>
-    <li><strong>Labeled rows</strong> (matched by name, in column A):
-      <code>India Investment Value (Rupees)</code>, <code>India Profit (Rupees)</code>,
-      <code>Germany Investment Value (Euros)</code>, <code>Germany Profit (Euros)</code>,
-      and <code>EUR to INR rate</code>.</li>
-    <li>Net worth and profit percentages are recomputed by the app — those rows are ignored.</li>
-  </ul>
-  <div class="table-scroll"><table>
-    <thead><tr><th>A</th><th>B</th><th>C</th><th>…</th></tr></thead>
-    <tbody>
-      <tr><td>Investment</td><td>January</td><td>February</td><td>…</td></tr>
-      <tr><td>India Investment Value (Rupees)</td><td>405901</td><td>416787</td><td>…</td></tr>
-      <tr><td>India Profit (Rupees)</td><td>86511</td><td>78845</td><td>…</td></tr>
-      <tr><td>Germany Investment Value (Euros)</td><td>8765</td><td>9755</td><td>…</td></tr>
-      <tr><td>Germany Profit (Euros)</td><td>345</td><td>349</td><td>…</td></tr>
-      <tr><td>India EUR to INR rate (Rupees)</td><td>110.016</td><td>110.016</td><td>…</td></tr>
-    </tbody>
-  </table></div>
-</details>
-
-<script>
-const box = document.getElementById('prompt');
-const note = document.getElementById('copied');
-document.getElementById('copybtn').addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText(box.value); }
-  catch (e) { box.select(); document.execCommand('copy'); }
-  note.textContent = 'Copied.';
-  setTimeout(() => note.textContent = '', 2500);
-});
-document.getElementById('dlbtn').addEventListener('click', () => {
-  const url = URL.createObjectURL(new Blob([box.value], {type: 'text/plain'}));
-  const a = Object.assign(document.createElement('a'), {href: url, download: 'hisaab-data-import-prompt.txt'});
-  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-});
-if (location.hash === '#excel-format') document.getElementById('excel-format').open = true;
-document.querySelectorAll('a[href="#excel-format"]').forEach(a =>
-  a.addEventListener('click', () => document.getElementById('excel-format').open = true));
-</script>
-
 {% endblock %}
