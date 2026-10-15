@@ -45,6 +45,17 @@ def calc_emi(principal: float, annual_rate: float, months: int) -> float:
     return principal * r * growth / (growth - 1)
 
 
+RATE_TIMINGS = {
+    "on_emi_date": "From the EMI date it's effective on (the EMI due that day already uses the new rate)",
+    "next_emi": "From the next EMI (the EMI due that day still uses the old rate; the new rate starts with the following one)",
+}
+
+
+def _rate_for(rates, due, prev_due, timing):
+    """Annual rate used for the installment due on `due` (its period began at `prev_due`)."""
+    return _in_force(rates, prev_due if timing == "next_emi" else due)
+
+
 def _in_force(periods, on: date):
     """Value of the latest (start, value) entry starting on/before `on`.
     Before the first entry, the first entry applies."""
@@ -57,7 +68,8 @@ def _in_force(periods, on: date):
     return value
 
 
-def build_schedule(principal, start, emis, rates, prepayments, today, recorded=()):
+def build_schedule(principal, start, emis, rates, prepayments, today, recorded=(),
+                   rate_applies="on_emi_date"):
     """Amortization rows until the loan clears (or MAX_MONTHS).
 
     emis / rates: iterables of (start_date, value); prepayments: (date, amount).
@@ -94,7 +106,7 @@ def build_schedule(principal, start, emis, rates, prepayments, today, recorded=(
             break
         due = add_months(base, i)
         days = (due - prev_due).days
-        monthly_rate = _in_force(rates, due) / 1200
+        monthly_rate = _rate_for(rates, due, prev_due, rate_applies) / 1200
         emi = _in_force(emis, due)
 
         seg_balance, seg_from = balance, prev_due
@@ -195,12 +207,19 @@ def foreclosure(loan, rows, rate_timeline, prepayments, on, charge_pct=0.0):
     """What it takes to pay the loan off completely on date `on`.
 
     Every installment due before `on` is assumed paid on schedule. The payoff is
-    the principal still outstanding that day, plus the interest accrued since
-    the last installment (days elapsed / days in the month, the same convention
-    used for prepayments), plus an optional foreclosure charge on the principal.
-    An installment falling due exactly on `on` is part of the payoff, not
-    paid on top of it.
+    the principal still outstanding that day, plus interest accrued since the
+    last installment, plus an optional foreclosure charge on the principal.
+
+    * An installment falling due exactly on `on` is part of the payoff (its full
+      period's interest, worked out as in the schedule), not paid on top of it.
+    * Between installments interest accrues daily on actual days / 365, which is
+      how lenders quote a part-month. Prepayments made in that stretch count
+      from the day they were paid.
+    * The rate is the one in force that day; for loans whose lender applies a
+      rate change only from the next EMI it is the rate the last EMI was billed
+      at, since the lender hasn't applied the reset yet.
     """
+    timing = loan.get("rate_applies") or "on_emi_date"
     start = parse_date(loan["start_date"])
     if on < start:
         raise ValueError("That date is before the loan started.")
@@ -219,21 +238,31 @@ def foreclosure(loan, rows, rate_timeline, prepayments, on, charge_pct=0.0):
     prev_due = before[-1]["due"] if before else start
     balance = before[-1]["closing"] if before else float(loan["principal"])
     nxt = after[0]
+    on_due_date = on == nxt["due"]
     period_days = (nxt["due"] - prev_due).days
     rates = sorted((parse_date(r["start"]), r["value"]) for r in rate_timeline)
-    monthly_rate = _in_force(rates, on) / 1200
+
+    if on_due_date:
+        rate = _rate_for(rates, nxt["due"], prev_due, timing)
+    elif timing == "next_emi":
+        billed_from = before[-2]["due"] if len(before) >= 2 else start
+        rate = _in_force(rates, billed_from)          # what the last EMI was billed at
+    else:
+        rate = _in_force(rates, on)
+
+    def accrue(amount, days):
+        if on_due_date:                               # a whole period: same as the schedule
+            return amount * rate / 1200 * days / period_days
+        return amount * rate / 100 / 365 * days       # part of a period: daily, actual/365
 
     seg_balance, seg_from, interest = balance, prev_due, 0.0
-    extra_paid = 0.0
     for when, amount in sorted((parse_date(p["date"]), p["amount"]) for p in prepayments):
         if not prev_due < when <= on:
             continue
-        amount = min(amount, seg_balance)
-        interest += seg_balance * monthly_rate * (when - seg_from).days / period_days
-        seg_balance -= amount
-        extra_paid += amount
+        interest += accrue(seg_balance, (when - seg_from).days)
+        seg_balance -= min(amount, seg_balance)
         seg_from = when
-    interest += seg_balance * monthly_rate * (on - seg_from).days / period_days
+    interest += accrue(seg_balance, (on - seg_from).days)
 
     charge = seg_balance * charge_pct / 100
     interest_saved = sum(r["interest"] for r in after[1:]) + max(0.0, nxt["interest"] - interest)
@@ -241,8 +270,9 @@ def foreclosure(loan, rows, rate_timeline, prepayments, on, charge_pct=0.0):
         "on": on, "closed": False, "principal": seg_balance, "interest": interest,
         "charge": charge, "charge_pct": charge_pct, "total": seg_balance + interest + charge,
         "since": prev_due, "days": (on - prev_due).days, "period_days": period_days,
-        "on_due_date": on == nxt["due"], "emis_before": len(before),
-        "interest_saved": interest_saved, "rate": _in_force(rates, on),
+        "on_due_date": on_due_date, "emis_before": len(before),
+        "interest_saved": interest_saved, "rate": rate,
+        "rate_on_file": timing == "next_emi" and not on_due_date,
     }
 
 
@@ -259,11 +289,13 @@ def yearly(rows):
 # ---------- storage ----------
 
 def create_loan(db, name, lender, currency, principal, start_date, tenure_months,
-                notes, emi, rate) -> int:
+                notes, emi, rate, rate_applies="on_emi_date") -> int:
     cur = db.execute(
-        """INSERT INTO loans (name, lender, currency, principal, start_date, tenure_months, notes)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (name.strip(), lender.strip(), currency, principal, start_date, tenure_months, notes.strip()),
+        """INSERT INTO loans (name, lender, currency, principal, start_date, tenure_months, notes,
+                              rate_applies)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (name.strip(), lender.strip(), currency, principal, start_date, tenure_months, notes.strip(),
+         rate_applies),
     )
     loan_id = cur.lastrowid
     if emi is not None:
@@ -273,12 +305,13 @@ def create_loan(db, name, lender, currency, principal, start_date, tenure_months
     return loan_id
 
 
-def update_loan(db, loan_id, name, lender, currency, principal, start_date, tenure_months, notes):
+def update_loan(db, loan_id, name, lender, currency, principal, start_date, tenure_months, notes,
+                rate_applies="on_emi_date"):
     db.execute(
         """UPDATE loans SET name=?, lender=?, currency=?, principal=?, start_date=?,
-                  tenure_months=?, notes=? WHERE id=?""",
+                  tenure_months=?, notes=?, rate_applies=? WHERE id=?""",
         (name.strip(), lender.strip(), currency, principal, start_date, tenure_months,
-         notes.strip(), loan_id),
+         notes.strip(), rate_applies, loan_id),
     )
 
 
@@ -411,7 +444,8 @@ def load(db, loan, today):
         for r in db.execute(
             "SELECT * FROM loan_installments WHERE loan_id=? ORDER BY due_date", (loan["id"],))
     ]
-    rows = build_schedule(loan["principal"], loan["start_date"], emis, rates, prepays, today, recorded)
+    rows = build_schedule(loan["principal"], loan["start_date"], emis, rates, prepays, today, recorded,
+                          loan["rate_applies"])
     return {
         "loan": dict(loan),
         "rows": rows,

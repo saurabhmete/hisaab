@@ -33,6 +33,7 @@ def _money(value, currency="EUR", decimals=0):
 templates.env.filters["money"] = _money
 templates.env.globals["month_names"] = d.MONTH_NAMES
 templates.env.globals["currencies"] = loans.CURRENCIES
+templates.env.globals["rate_timings"] = loans.RATE_TIMINGS
 
 SESSION_COOKIE = "hisaab_session"
 PUBLIC_PATHS = ("/login", "/setup", "/static")
@@ -495,7 +496,8 @@ def remove_investment(inv_id: int):
 
 # ---------- loans ----------
 
-def _loan_values(name, lender, currency, principal, start_date, tenure_months, notes):
+def _loan_values(name, lender, currency, principal, start_date, tenure_months, notes,
+                 rate_applies="on_emi_date"):
     """Validate the fields shared by create and edit. Raises ValueError with a
     message fit to show the user."""
     name = name.strip()
@@ -509,6 +511,8 @@ def _loan_values(name, lender, currency, principal, start_date, tenure_months, n
         date.fromisoformat(start_date)
     except ValueError:
         raise ValueError("The start date is not a valid date.")
+    if rate_applies not in loans.RATE_TIMINGS:
+        raise ValueError("Pick when rate changes apply from the list.")
     tenure = None
     if tenure_months.strip():
         try:
@@ -518,7 +522,8 @@ def _loan_values(name, lender, currency, principal, start_date, tenure_months, n
         if not 0 < tenure <= loans.MAX_MONTHS:
             raise ValueError(f"Tenure must be between 1 and {loans.MAX_MONTHS} months.")
     return {"name": name, "lender": lender, "currency": currency, "principal": principal,
-            "start_date": start_date, "tenure_months": tenure, "notes": notes}
+            "start_date": start_date, "tenure_months": tenure, "notes": notes,
+            "rate_applies": rate_applies}
 
 
 def _valid_date(value: str) -> bool:
@@ -686,15 +691,16 @@ def loan_detail(request: Request, loan_id: int, error: str = "",
 def loan_edit(
     loan_id: int, name: str = Form(""), lender: str = Form(""), currency: str = Form("EUR"),
     principal: float = Form(0), start_date: str = Form(""), tenure_months: str = Form(""),
-    notes: str = Form(""),
+    notes: str = Form(""), rate_applies: str = Form("on_emi_date"),
 ):
     try:
-        v = _loan_values(name, lender, currency, principal, start_date, tenure_months, notes)
+        v = _loan_values(name, lender, currency, principal, start_date, tenure_months, notes,
+                         rate_applies)
     except ValueError as exc:
         return RedirectResponse(f"/loans/{loan_id}?error={str(exc).replace(' ', '+')}", status_code=303)
     with d.get_db() as db:
         loans.update_loan(db, loan_id, v["name"], v["lender"], v["currency"], v["principal"],
-                          v["start_date"], v["tenure_months"], v["notes"])
+                          v["start_date"], v["tenure_months"], v["notes"], v["rate_applies"])
     return RedirectResponse(f"/loans/{loan_id}", status_code=303)
 
 

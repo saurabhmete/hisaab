@@ -98,8 +98,8 @@
     <div class="ledger" style="margin-top:0.6rem">
       <div class="ledger-row"><span>Outstanding principal</span><span>{{ closing.principal | money(cur, 2) }}</span></div>
       <div class="ledger-row"><span>
-        {% if closing.on_due_date %}Interest for the month ending that day{% else %}Interest for {{ closing.days }} of {{ closing.period_days }} days since {{ closing.since.strftime('%d %b') }}{% endif %}
-        <span class="muted small">at {{ '%g' % closing.rate }}%</span></span>
+        {% if closing.on_due_date %}Interest for the month ending that day{% else %}Interest for {{ closing.days }} days since {{ closing.since.strftime('%d %b') }}{% endif %}
+        <span class="muted small">at {{ '%g' % closing.rate }}%{% if not closing.on_due_date %}, daily on a 365-day year{% endif %}{% if closing.rate_on_file %} (the rate your last EMI was billed at){% endif %}</span></span>
         <span>{{ closing.interest | money(cur, 2) }}</span></div>
       {% if closing.charge_pct %}
       <div class="ledger-row"><span>Foreclosure charge ({{ '%g' % closing.charge_pct }}%)</span><span>{{ closing.charge | money(cur, 2) }}</span></div>
@@ -278,6 +278,14 @@
       <label class="field">Original tenure (months)
         <input type="number" min="1" name="tenure_months" value="{{ loan.tenure_months or '' }}"></label>
     </div>
+    <label class="field" style="margin-top:0.8rem"><span>When a rate change takes effect on an EMI date, apply it</span>
+      <select name="rate_applies">
+        {% for key, text in rate_timings.items() %}
+        <option value="{{ key }}" {% if loan.rate_applies == key %}selected{% endif %}>{{ text }}</option>
+        {% endfor %}
+      </select>
+      <span class="muted hint">Look at how your lender's own interest figures moved after a past rate change. This decides which EMI first uses the new rate, and what a payoff quote between EMIs uses.</span>
+    </label>
     <label class="field" style="margin-top:0.8rem">Notes <input name="notes" value="{{ loan.notes }}"></label>
     <div style="margin-top:0.9rem"><button type="submit">Save changes</button></div>
   </form>

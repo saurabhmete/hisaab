@@ -60,7 +60,8 @@ CREATE TABLE IF NOT EXISTS loans (
     start_date    TEXT NOT NULL,
     tenure_months INTEGER,
     notes         TEXT NOT NULL DEFAULT '',
-    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    rate_applies  TEXT NOT NULL DEFAULT 'on_emi_date'
 );
 
 CREATE TABLE IF NOT EXISTS loan_emis (
@@ -118,6 +119,19 @@ def init_db():
     with get_db() as db:
         db.executescript(SCHEMA)
     _drop_loan_currency_check()
+    _add_loan_columns()
+
+
+def _add_loan_columns():
+    """Columns added after the first release of the loans table."""
+    db = sqlite3.connect(DB_PATH)
+    try:
+        have = {r[1] for r in db.execute("PRAGMA table_info(loans)")}
+        if "rate_applies" not in have:
+            db.execute("ALTER TABLE loans ADD COLUMN rate_applies TEXT NOT NULL DEFAULT 'on_emi_date'")
+            db.commit()
+    finally:
+        db.close()
 
 
 def _drop_loan_currency_check():

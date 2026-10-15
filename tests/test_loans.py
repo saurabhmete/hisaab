@@ -426,14 +426,14 @@ def test_closing_mid_month_charges_interest_only_for_the_days_elapsed():
     june = next(r for r in data["rows"] if r["due"] == date(2025, 6, 10))
     assert abs(c["principal"] - june["closing"]) < 0.01
     assert c["days"] == 15 and c["period_days"] == 30
-    assert abs(c["interest"] - june["closing"] * 0.01 * 15 / 30) < 0.01
+    assert abs(c["interest"] - june["closing"] * 0.12 / 365 * 15) < 0.01    # daily, actual/365
     assert not c["on_due_date"] and c["emis_before"] == 5
 
 
 def test_closing_a_day_after_an_emi_costs_almost_just_the_balance():
     data, c = _closing(_plain_loan(), date(2025, 6, 11))
     june = next(r for r in data["rows"] if r["due"] == date(2025, 6, 10))
-    assert abs(c["total"] - june["closing"]) < june["closing"] * 0.01 / 30 + 0.01
+    assert abs(c["total"] - june["closing"] - june["closing"] * 0.12 / 365) < 0.01
 
 
 def test_closing_adds_the_foreclosure_charge_on_the_principal_only():
@@ -463,8 +463,8 @@ def test_closing_accounts_for_a_prepayment_made_earlier_in_the_same_month():
     data, c = _closing(db, date(2025, 6, 25))
     june = next(r for r in data["rows"] if r["due"] == date(2025, 6, 10))   # the period starts here
     assert abs(c["principal"] - (june["closing"] - 10_000)) < 0.01
-    # 5 days at the old balance (10 -> 15 June), then 10 days at the reduced one (15 -> 25 June), of a 30-day month
-    expected = june["closing"] * 0.01 * 5 / 30 + (june["closing"] - 10_000) * 0.01 * 10 / 30
+    # 5 days at the old balance (10 -> 15 June), then 10 days at the reduced one (15 -> 25 June)
+    expected = june["closing"] * 0.12 / 365 * 5 + (june["closing"] - 10_000) * 0.12 / 365 * 10
     assert abs(c["interest"] - expected) < 0.01
 
 
@@ -490,6 +490,79 @@ def test_closing_early_saves_the_interest_of_every_later_installment():
     data, c = _closing(_plain_loan(), date(2025, 6, 10))
     later = sum(r["interest"] for r in data["rows"] if r["due"] > date(2025, 6, 10))
     assert abs(c["interest_saved"] - later) < 0.01
+
+
+# ---------- when the lender applies a rate change ----------
+
+RATES_UP = [("2025-01-10", 12.0), ("2025-06-10", 15.0)]     # 3-point rise effective ON an EMI date
+
+
+def _rows(timing):
+    return L.build_schedule(100_000, "2025-01-10", [("2025-01-10", 9_000)], RATES_UP, [],
+                            date(2025, 3, 1), (), timing)
+
+
+def test_rate_change_on_an_emi_date_applies_to_that_emi_by_default():
+    june = next(r for r in _rows("on_emi_date") if r["due"] == date(2025, 6, 10))
+    assert abs(june["interest"] - june["opening"] * 0.15 / 12) < 0.01
+
+
+def test_rate_change_can_apply_from_the_next_emi_instead():
+    rows = _rows("next_emi")
+    june = next(r for r in rows if r["due"] == date(2025, 6, 10))
+    july = next(r for r in rows if r["due"] == date(2025, 7, 10))
+    assert abs(june["interest"] - june["opening"] * 0.12 / 12) < 0.01     # still the old rate
+    assert abs(july["interest"] - july["opening"] * 0.15 / 12) < 0.01     # new rate starts here
+
+
+def test_the_two_timings_differ_only_from_the_change_onwards():
+    a, b = _rows("on_emi_date"), _rows("next_emi")
+    assert [r["closing"] for r in a[:4]] == [r["closing"] for r in b[:4]]
+    assert a[4]["closing"] != b[4]["closing"]
+
+
+def _stand_in_for_the_reported_case(timing):
+    """Statement balance 1,500,000 on 11 Sep; EMI 22,000; the rate rises 14.15 -> 14.40
+    effective 11 Oct, and the borrower asks to pay off on 31 Oct."""
+    loan = {"principal": 1_200_000, "start_date": "2021-02-11", "tenure_months": 200,
+            "rate_applies": timing}
+    emis = [("2021-02-11", 22_000)]
+    rates = [("2021-02-11", 14.15), ("2026-10-11", 14.4)]
+    recorded = [{"due": "2026-09-11", "emi": 22_000, "principal": 4_000, "interest": 18_000,
+                 "prepaid": 0, "capitalized": 0, "closing": 1_500_000}]
+    rows = L.build_schedule(1_200_000, "2021-02-11", emis, rates, [], date(2026, 10, 15), recorded, timing)
+    timeline = [{"start": date.fromisoformat(d), "value": v} for d, v in rates]
+    return rows, L.foreclosure(loan, rows, timeline, [], date(2026, 10, 31))
+
+
+def test_payoff_between_emis_follows_the_rate_the_lender_has_applied():
+    # Lender applies resets from the next EMI: the 11 Oct EMI and the days after it are still at 14.15%.
+    rows, c = _stand_in_for_the_reported_case("next_emi")
+    oct_row = next(r for r in rows if r["due"] == date(2026, 10, 11))
+    assert abs(oct_row["interest"] - 1_500_000 * 14.15 / 1200) < 0.01
+    principal = 1_500_000 - (22_000 - oct_row["interest"])
+    assert abs(c["principal"] - principal) < 0.01 and c["rate"] == 14.15 and c["rate_on_file"]
+    assert abs(c["interest"] - principal * 0.1415 / 365 * 20) < 0.01
+
+
+def test_payoff_when_resets_apply_on_the_emi_date_uses_the_new_rate_for_both():
+    rows, c = _stand_in_for_the_reported_case("on_emi_date")
+    oct_row = next(r for r in rows if r["due"] == date(2026, 10, 11))
+    assert abs(oct_row["interest"] - 1_500_000 * 14.4 / 1200) < 0.01
+    assert c["rate"] == 14.4 and not c["rate_on_file"]
+    assert abs(c["interest"] - c["principal"] * 0.144 / 365 * 20) < 0.01
+
+
+def test_the_two_timings_give_different_payoffs_for_the_same_date():
+    _, slow = _stand_in_for_the_reported_case("next_emi")
+    _, quick = _stand_in_for_the_reported_case("on_emi_date")
+    assert quick["total"] > slow["total"] + 100
+
+
+def test_rate_applies_survives_a_save_and_a_reload():
+    db = _plain_loan()
+    L.update_loan(db, 1, "Plain", "", "EUR", 100_000, "2025-01-10", 12, "", "next_emi")
+    assert L.load(db, L.get_loan(db, 1), date(2025, 3, 1))["loan"]["rate_applies"] == "next_emi"
 
 
 if __name__ == "__main__":

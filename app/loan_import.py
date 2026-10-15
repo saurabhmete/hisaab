@@ -56,6 +56,7 @@ WHAT EACH FIELD MEANS
 - loan.principal: the amount actually disbursed. If it differs from the sanctioned amount, mention the sanctioned amount in "notes".
 - loan.start_date: the due date of the first installment in the schedule (or the disbursement date if that is all you have).
 - loan.tenure_months: the original total tenure, from start_date to the last installment of the original schedule. null if unknown.
+- loan.rate_applies (optional): look at the installment rows around a past rate change. If the installment due ON the day a new rate took effect was already charged at the new rate, set "on_emi_date". If it was still charged at the old rate and the new rate started with the following installment, set "next_emi". If you can't tell, or there was no rate change, leave this field out.
 - emi_history: the regular installment amount and the date it applies from. Add a new entry every time the installment amount changes. A part-payment or interest-only phase followed by full EMIs is two entries. A change of interest rate alone is NOT a new entry when the amount stays the same.
 - rate_history: the annual interest rate in percent that I am actually charged, with the date it took effect. Include the first rate. Use the "rate of interest" column, not the benchmark rate or the spread. One entry per change.
 - prepayments: extra payments I made on top of the regular installments (date, amount, short note). Use [] if there are none.
@@ -84,6 +85,7 @@ EXAMPLE = {
     "loan": {
         "name": "Home loan", "lender": "Example Bank", "currency": "INR",
         "principal": 500000, "start_date": "2025-12-05", "tenure_months": 60,
+        "rate_applies": "on_emi_date",
         "notes": "Account no. 123456. Sanctioned 600000.",
     },
     "emi_history": [{"from": "2025-12-05", "amount": 10600}],
@@ -218,7 +220,11 @@ def parse(text: str, today: date) -> dict:
     if src.get("tenure_months") not in (None, ""):
         t = check.number(src.get("tenure_months"), "loan.tenure_months", minimum=1, maximum=L.MAX_MONTHS)
         tenure = int(t) if t is not None else None
+    rate_applies = str(src.get("rate_applies") or "on_emi_date").strip()
+    if rate_applies not in L.RATE_TIMINGS:
+        check.error(f"loan.rate_applies: '{rate_applies}' should be \"on_emi_date\" or \"next_emi\".")
     loan = {"name": name[:120], "lender": str(src.get("lender") or "").strip()[:120],
+            "rate_applies": rate_applies,
             "currency": currency, "principal": principal,
             "start_date": start.isoformat() if start else None, "tenure_months": tenure,
             "notes": str(src.get("notes") or "").strip()[:2000]}
@@ -357,7 +363,7 @@ def _preview(data, today):
     loan = dict(data["loan"], id=0)
     rows = L.build_schedule(loan["principal"], loan["start_date"], data["emis"], data["rates"],
                             [(p["date"], p["amount"]) for p in data["prepayments"]], today,
-                            data["installments"])
+                            data["installments"], loan["rate_applies"])
     s = L.summarize(loan, rows, data["emis"], data["rates"],
                     [(p["date"], p["amount"]) for p in data["prepayments"]], today)
     inst = data["installments"]
@@ -382,7 +388,8 @@ def _preview(data, today):
 def create(db, data) -> int:
     ln = data["loan"]
     loan_id = L.create_loan(db, ln["name"], ln["lender"], ln["currency"], ln["principal"],
-                            ln["start_date"], ln["tenure_months"], ln["notes"], None, None)
+                            ln["start_date"], ln["tenure_months"], ln["notes"], None, None,
+                            ln["rate_applies"])
     for when, amount in data["emis"]:
         L.set_emi(db, loan_id, when, amount)
     for when, rate in data["rates"]:
