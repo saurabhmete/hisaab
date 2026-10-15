@@ -8,6 +8,10 @@
 </div>
 
 {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+<div class="notice info" style="margin-top:0">
+  Already paying this loan for a while? <a href="/loans/import">Import it from your lender's statement</a>
+  instead, with the full history of installments, EMI changes and rate changes.
+</div>
 
 <form method="post" action="/loans" class="panel loanform">
   <h2>The loan</h2>

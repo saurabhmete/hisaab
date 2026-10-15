@@ -10,3 +10,7 @@ __pycache__/
 *.pyc
 .DS_Store
 .env
+
+# Loan statements and the import files made from them are personal
+loan-import*.json
+*.pdf

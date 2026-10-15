@@ -87,6 +87,19 @@ CREATE TABLE IF NOT EXISTS loan_prepayments (
     note    TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS loan_installments (
+    id          INTEGER PRIMARY KEY,
+    loan_id     INTEGER NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
+    due_date    TEXT NOT NULL,
+    emi         REAL NOT NULL,
+    principal   REAL NOT NULL,
+    interest    REAL NOT NULL,
+    prepaid     REAL NOT NULL DEFAULT 0,
+    capitalized REAL NOT NULL DEFAULT 0,
+    closing     REAL NOT NULL,
+    UNIQUE (loan_id, due_date)
+);
+
 CREATE TABLE IF NOT EXISTS login_failures (
     id INTEGER PRIMARY KEY,
     ip TEXT NOT NULL,

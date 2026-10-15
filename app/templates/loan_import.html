@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Import a loan · Hisaab{% endblock %}
+{% block content %}
+
+<div class="month-nav">
+  <a class="navarrow" href="/loans" title="All loans">&larr;</a>
+  <h1>Import a running loan</h1>
+</div>
+<p class="muted" style="margin-top:0">
+  Already paying a loan for years? Don't retype its history. Give Claude your lender's
+  documents and the prompt below; it produces a file that Hisaab loads, including the past
+  installments, every EMI and rate change, and any part-payments.
+</p>
+
+{% if result and result.errors %}
+<div class="notice error">
+  <strong>This file can't be imported yet:</strong>
+  <ul style="margin:0.3rem 0 0">{% for e in result.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+  <p class="small" style="margin-bottom:0">Tell Claude what the errors say and ask it to fix the file, then upload the new one.</p>
+</div>
+{% endif %}
+
+<div class="panel">
+  <h2>1 &middot; Copy the prompt</h2>
+  <textarea id="prompt" class="promptbox" readonly rows="9" aria-label="Prompt for Claude">{{ prompt }}</textarea>
+  <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-top:0.6rem">
+    <button type="button" id="copybtn">Copy prompt</button>
+    <button type="button" class="secondary" id="dlbtn">Download as .txt</button>
+    <span class="muted small" id="copied" style="align-self:center"></span>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>2 &middot; Ask Claude</h2>
+  <ol class="steps small">
+    <li>Open a new chat in <strong>Claude</strong> (claude.ai or the app) and paste the prompt.</li>
+    <li>Attach what you have from your lender: the <strong>repayment schedule or loan statement</strong> (PDF is fine),
+        and the <strong>interest-rate change table</strong> (a screenshot works). A sanction letter helps too.</li>
+    <li>Send it. Claude replies with a file called <code>loan-import.json</code> and a list of anything it wasn't sure about. Read that list.</li>
+    <li>Download the file. If Claude shows the JSON in a code block instead, copy it and paste it in the box below.</li>
+  </ol>
+  <p class="muted small" style="margin-bottom:0">
+    Your documents contain personal details; the prompt tells Claude to leave them out of the file.
+    Only the loan numbers reach Hisaab.
+  </p>
+</div>
+
+<div class="panel">
+  <h2>3 &middot; Upload the file</h2>
+  <form method="post" action="/loans/import" enctype="multipart/form-data">
+    <label class="field">File from Claude <span class="muted">(.json)</span>
+      <input type="file" name="file" accept=".json,.txt,application/json,text/plain">
+    </label>
+    <p class="muted small" style="margin:0.8rem 0 0.4rem">&hellip;or paste what Claude gave you:</p>
+    <textarea name="pasted" class="promptbox" rows="5" placeholder='{ "format": "hisaab-loan-import", … }'>{{ pasted }}</textarea>
+    <div style="margin-top:0.8rem"><button type="submit">Check the file</button></div>
+  </form>
+  <p class="muted small" style="margin-bottom:0">Nothing is saved yet &mdash; you'll review a summary first.</p>
+</div>
+
+<script>
+const box = document.getElementById('prompt');
+const note = document.getElementById('copied');
+document.getElementById('copybtn').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(box.value); }
+  catch (e) { box.select(); document.execCommand('copy'); }
+  note.textContent = 'Copied.';
+  setTimeout(() => note.textContent = '', 2500);
+});
+document.getElementById('dlbtn').addEventListener('click', () => {
+  const url = URL.createObjectURL(new Blob([box.value], {type: 'text/plain'}));
+  const a = Object.assign(document.createElement('a'), {href: url, download: 'hisaab-loan-import-prompt.txt'});
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+});
+</script>
+
+{% endblock %}

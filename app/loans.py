@@ -57,10 +57,14 @@ def _in_force(periods, on: date):
     return value
 
 
-def build_schedule(principal, start, emis, rates, prepayments, today):
+def build_schedule(principal, start, emis, rates, prepayments, today, recorded=()):
     """Amortization rows until the loan clears (or MAX_MONTHS).
 
     emis / rates: iterables of (start_date, value); prepayments: (date, amount).
+    recorded: installments taken from the lender's own statement (dicts with
+    due, emi, principal, interest, prepaid, capitalized, closing). They are
+    history and are never recalculated; the projection continues from the last
+    one, and prepayments dated on/before it are already in its balance.
     """
     emis = sorted((parse_date(s), v) for s, v in emis)
     rates = sorted((parse_date(s), v) for s, v in rates)
@@ -70,10 +74,25 @@ def build_schedule(principal, start, emis, rates, prepayments, today):
         return []
 
     rows, balance, prev_due, pi = [], float(principal), start, 0
+    base, offset = start, 0
+    past = sorted(recorded, key=lambda r: parse_date(r["due"]))
+    for r in past:
+        due = parse_date(r["due"])
+        rows.append({
+            "n": len(rows) + 1, "due": due, "opening": balance, "emi": r["emi"],
+            "interest": r["interest"], "principal": r["principal"],
+            "prepaid": r.get("prepaid", 0.0), "capitalized": r.get("capitalized", 0.0),
+            "closing": r["closing"], "paid": due <= today, "grows": False, "recorded": True,
+        })
+        balance = r["closing"]
+    if past:
+        base = prev_due = rows[-1]["due"]
+        offset = len(rows)
+        prepays = [(d, a) for d, a in prepays if d > base]
     for i in range(1, MAX_MONTHS + 1):
         if balance <= EPS:
             break
-        due = add_months(start, i)
+        due = add_months(base, i)
         days = (due - prev_due).days
         monthly_rate = _in_force(rates, due) / 1200
         emi = _in_force(emis, due)
@@ -98,10 +117,10 @@ def build_schedule(principal, start, emis, rates, prepayments, today):
             closing = 0.0
 
         rows.append({
-            "n": i, "due": due, "opening": balance, "emi": payment,
+            "n": offset + i, "due": due, "opening": balance, "emi": payment,
             "interest": interest, "principal": principal_paid, "prepaid": prepaid,
-            "closing": closing, "paid": due <= today,
-            "grows": closing > balance - prepaid + EPS,
+            "capitalized": 0.0, "closing": closing, "paid": due <= today,
+            "grows": closing > balance - prepaid + EPS, "recorded": False,
         })
         balance, prev_due = closing, due
     return rows
@@ -143,11 +162,18 @@ def summarize(loan, rows, emis, rates, prepayments, today):
     end_date = rows[-1]["due"] if closes else None
     planned_end = add_months(start, loan["tenure_months"]) if loan["tenure_months"] else None
 
-    total_interest = sum(r["interest"] for r in rows)
+    capitalized = sum(r["capitalized"] for r in rows)
+    # Interest that went unpaid and was added to the principal is still interest
+    # the borrower pays, through the principal part of later installments.
+    total_interest = sum(r["interest"] for r in rows) + capitalized
+    repaid = principal + sum(r["capitalized"] for r in paid) - outstanding
     return {
         "outstanding": outstanding,
-        "principal_repaid": principal - outstanding,
-        "progress": min(1.0, max(0.0, (principal - outstanding) / principal)),
+        "principal_repaid": repaid,
+        "capitalized": capitalized,
+        "has_statement": any(r["recorded"] for r in rows),
+        "statement_until": max((r["due"] for r in rows if r["recorded"]), default=None),
+        "progress": min(1.0, max(0.0, repaid / (principal + capitalized))),
         "interest_paid": sum(r["interest"] for r in paid),
         "emis_paid": len(paid),
         "emis_left": len(upcoming),
@@ -185,8 +211,10 @@ def create_loan(db, name, lender, currency, principal, start_date, tenure_months
         (name.strip(), lender.strip(), currency, principal, start_date, tenure_months, notes.strip()),
     )
     loan_id = cur.lastrowid
-    set_emi(db, loan_id, start_date, emi)
-    set_rate(db, loan_id, start_date, rate)
+    if emi is not None:
+        set_emi(db, loan_id, start_date, emi)
+    if rate is not None:
+        set_rate(db, loan_id, start_date, rate)
     return loan_id
 
 
@@ -284,6 +312,16 @@ def delete_rate(db, loan_id, rate_id):
         db.execute("DELETE FROM loan_rates WHERE id=? AND loan_id=?", (rate_id, loan_id))
 
 
+def add_installments(db, loan_id, installments):
+    for r in installments:
+        db.execute(
+            """INSERT INTO loan_installments
+                   (loan_id, due_date, emi, principal, interest, prepaid, capitalized, closing)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (loan_id, r["due"], r["emi"], r["principal"], r["interest"],
+             r.get("prepaid", 0.0), r.get("capitalized", 0.0), r["closing"]))
+
+
 def add_prepayment(db, loan_id, when, amount, note):
     db.execute(
         "INSERT INTO loan_prepayments (loan_id, date, amount, note) VALUES (?, ?, ?, ?)",
@@ -311,7 +349,14 @@ def load(db, loan, today):
     emis = [(r["start_date"], r["amount"]) for r in emi_rows]
     rates = [(r["start_date"], r["rate"]) for r in rate_rows]
     prepays = [(r["date"], r["amount"]) for r in prepay_rows]
-    rows = build_schedule(loan["principal"], loan["start_date"], emis, rates, prepays, today)
+    recorded = [
+        {"due": r["due_date"], "emi": r["emi"], "principal": r["principal"],
+         "interest": r["interest"], "prepaid": r["prepaid"],
+         "capitalized": r["capitalized"], "closing": r["closing"]}
+        for r in db.execute(
+            "SELECT * FROM loan_installments WHERE loan_id=? ORDER BY due_date", (loan["id"],))
+    ]
+    rows = build_schedule(loan["principal"], loan["start_date"], emis, rates, prepays, today, recorded)
     return {
         "loan": dict(loan),
         "rows": rows,

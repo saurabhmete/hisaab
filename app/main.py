@@ -4,7 +4,7 @@ import os
 import secrets
 from datetime import date
 
-from fastapi import FastAPI, Form, Request, UploadFile
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -12,6 +12,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from . import database as d
 from . import importer
+from . import loan_import
 from . import loans
 from . import rates
 
@@ -547,6 +548,55 @@ def loans_page(request: Request):
 def loan_new(request: Request):
     form = {"currency": "EUR", "start_date": date.today().isoformat()}
     return _render(request, "loan_new.html", form=form, error=None)
+
+
+MAX_IMPORT_BYTES = 1_000_000
+
+
+def _import_page(request, result=None, pasted=""):
+    return _render(request, "loan_import.html", prompt=loan_import.build_prompt(date.today()),
+                   result=result, pasted=pasted)
+
+
+@app.get("/loans/import")
+def loan_import_page(request: Request):
+    return _import_page(request)
+
+
+@app.post("/loans/import")
+async def loan_import_check(request: Request, file: UploadFile | None = File(None),
+                            pasted: str = Form("")):
+    """Step 1 of 2: validate the file and show what would be created. Saves nothing."""
+    text = pasted
+    if file is not None and file.filename:
+        content = await file.read(MAX_IMPORT_BYTES + 1)
+        if len(content) > MAX_IMPORT_BYTES:
+            result = {"ok": False, "errors": ["That file is too large to be a loan import."],
+                      "warnings": [], "info": []}
+            return _import_page(request, result)
+        text = content.decode("utf-8-sig", errors="replace")
+    result = loan_import.parse(text, date.today())
+    if not result["ok"]:
+        return _import_page(request, result, pasted=text if len(text) < 200_000 else "")
+    with d.get_db() as db:
+        same_name = db.execute("SELECT 1 FROM loans WHERE lower(name)=lower(?)",
+                               (result["data"]["loan"]["name"],)).fetchone()
+    if same_name:
+        result["warnings"].append(
+            f"You already have a loan called '{result['data']['loan']['name']}'. "
+            "Importing again creates a second one.")
+    return _render(request, "loan_import_preview.html", result=result, payload=text)
+
+
+@app.post("/loans/import/confirm")
+def loan_import_confirm(request: Request, payload: str = Form(...)):
+    """Step 2 of 2: re-validate the same text and store it."""
+    result = loan_import.parse(payload, date.today())
+    if not result["ok"]:
+        return _import_page(request, result, pasted=payload)
+    with d.get_db() as db:
+        loan_id = loan_import.create(db, result["data"])
+    return RedirectResponse(f"/loans/{loan_id}", status_code=303)
 
 
 @app.post("/loans")

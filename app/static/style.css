@@ -241,6 +241,17 @@ code, kbd {
   background: var(--accent-soft); border-radius: 6px; padding: 0.1em 0.4em;
 }
 
+/* ---------- loan import ---------- */
+
+.promptbox {
+  width: 100%; resize: vertical; background: var(--page); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 10px; padding: 0.7rem 0.8rem;
+  font: 0.8rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.steps { margin: 0 0 0.8rem; padding-left: 1.3rem; }
+.steps li { margin: 0.35rem 0; }
+.notice.warn { border-left-color: #fab219; }
+
 /* ---------- loans ---------- */
 
 .loancard { display: block; text-decoration: none; color: inherit; }

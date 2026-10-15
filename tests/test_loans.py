@@ -217,6 +217,176 @@ def test_old_two_currency_check_is_rebuilt_without_losing_loans():
         D.DB_PATH = saved
 
 
+# ---------- importing a running loan ----------
+
+import copy
+import json
+
+from app import loan_import as I
+
+TODAY_IMPORT = date(2026, 10, 15)
+
+
+def _part_payment_loan():
+    """A small loan shaped like a real one: 3 months paying 100 against 1000/month
+    of interest, then the unpaid interest joins the principal and full EMIs begin."""
+    rows = [
+        {"due": "2025-01-10", "emi": 100, "principal": 0, "interest": 100, "closing_balance": 120000},
+        {"due": "2025-02-10", "emi": 100, "principal": 0, "interest": 100, "closing_balance": 120000},
+        {"due": "2025-03-10", "emi": 100, "principal": 0, "interest": 100, "closing_balance": 120000},
+        # 3 x (1000 - 100) = 2700 of unpaid interest joins the principal here
+        {"due": "2025-04-10", "emi": 2000, "principal": 1000, "interest": 1000, "closing_balance": 121700},
+        {"due": "2025-05-10", "emi": 2000, "principal": 1010, "interest": 990, "closing_balance": 120690},
+    ]
+    return {
+        "format": "hisaab-loan-import", "version": 1, "as_of": "2025-06-01",
+        "loan": {"name": "Test loan", "lender": "", "currency": "INR", "principal": 120000,
+                 "start_date": "2025-01-10", "tenure_months": 60, "notes": ""},
+        "emi_history": [{"from": "2025-01-10", "amount": 100}, {"from": "2025-04-10", "amount": 2000}],
+        "rate_history": [{"from": "2025-01-10", "rate": 10.0}],
+        "prepayments": [], "installments": rows,
+    }
+
+
+def _parse(doc, today=TODAY_IMPORT):
+    return I.parse(json.dumps(doc), today)
+
+
+def test_prompt_mentions_today_and_the_file_format():
+    prompt = I.build_prompt(date(2026, 10, 15))
+    assert "2026-10-15" in prompt and I.FORMAT in prompt and "closing_balance" in prompt
+    assert "{" in prompt and "{example}" not in prompt and "{today}" not in prompt
+
+
+def test_the_example_inside_the_prompt_is_itself_a_valid_import():
+    r = I.parse(json.dumps(I.EXAMPLE), TODAY_IMPORT)
+    assert r["ok"], r["errors"]
+
+
+def test_import_accepts_a_whole_chat_reply_with_a_fenced_block():
+    reply = "Here you go!\n```json\n" + json.dumps(_part_payment_loan()) + "\n```\nAssumptions: none."
+    assert I.parse(reply, TODAY_IMPORT)["ok"]
+
+
+def test_import_finds_interest_added_to_principal_without_being_told():
+    r = _parse(_part_payment_loan())
+    assert r["ok"], r["errors"]
+    capitalised = [x for x in r["data"]["installments"] if x["capitalized"]]
+    assert len(capitalised) == 1 and capitalised[0]["due"] == "2025-04-10"
+    assert abs(capitalised[0]["capitalized"] - 2700) < 0.01
+    assert r["info"] and not r["warnings"]
+
+
+def test_import_treats_an_unexplained_drop_in_balance_as_an_extra_payment():
+    doc = _part_payment_loan()
+    doc["installments"][4]["closing_balance"] = 100690          # 20000 lower than expected
+    r = _parse(doc)
+    assert r["ok"] and r["data"]["installments"][4]["prepaid"] == 20000
+    assert any("extra payments" in w for w in r["warnings"])
+
+
+def test_import_ignores_installments_after_the_statement_date():
+    doc = _part_payment_loan()
+    doc["as_of"] = "2025-04-15"
+    r = _parse(doc)
+    assert r["ok"] and len(r["data"]["installments"]) == 4
+    assert any("ignored" in w for w in r["warnings"])
+
+
+def test_import_warns_about_missing_months():
+    doc = _part_payment_loan()
+    del doc["installments"][1]
+    assert any("consecutive" in w for w in _parse(doc)["warnings"])
+
+
+def test_import_rejects_bad_files_with_clear_messages():
+    assert "valid JSON" in I.parse("not json at all {", TODAY_IMPORT)["errors"][0]
+    assert I.parse("", TODAY_IMPORT)["errors"] == ["The file is empty."]
+    doc = _part_payment_loan()
+
+    bad = copy.deepcopy(doc); bad["format"] = "something-else"
+    assert "marker" in _parse(bad)["errors"][0]
+
+    bad = copy.deepcopy(doc); bad["installments"][0]["due"] = "10/01/25"
+    assert any("YYYY-MM-DD" in e for e in _parse(bad)["errors"])
+
+    bad = copy.deepcopy(doc); bad["loan"]["currency"] = "XYZ"
+    assert any("currency" in e for e in _parse(bad)["errors"])
+
+    bad = copy.deepcopy(doc); bad["rate_history"] = []
+    assert any("rate_history" in e for e in _parse(bad)["errors"])
+
+    bad = copy.deepcopy(doc); bad["loan"]["principal"] = -5
+    assert any("principal" in e for e in _parse(bad)["errors"])
+
+    bad = copy.deepcopy(doc); bad["installments"].append(dict(doc["installments"][0]))
+    assert any("twice" in e for e in _parse(bad)["errors"])
+
+
+def test_import_tolerates_numbers_sent_as_formatted_strings():
+    doc = _part_payment_loan()
+    doc["loan"]["principal"] = "1,20,000"
+    assert _parse(doc)["ok"]
+
+
+def test_a_statement_loan_keeps_history_and_projects_from_the_last_recorded_row():
+    r = _parse(_part_payment_loan())
+    data = r["data"]
+    rows = L.build_schedule(data["loan"]["principal"], data["loan"]["start_date"], data["emis"],
+                            data["rates"], [], TODAY_IMPORT, data["installments"])
+    assert [x["recorded"] for x in rows[:5]] == [True] * 5 and not rows[5]["recorded"]
+    assert rows[4]["closing"] == 120690                           # kept exactly as recorded
+    assert rows[5]["due"] == date(2025, 6, 10) and rows[5]["n"] == 6
+    assert abs(rows[5]["interest"] - 120690 * 10 / 1200) < 0.01   # projection starts from the statement balance
+    assert rows[5]["emi"] == 2000 and rows[-1]["closing"] == 0
+
+
+def test_summary_counts_capitalised_interest_in_what_has_to_be_repaid():
+    data = _parse(_part_payment_loan())["data"]
+    s = I._preview(data, date(2025, 5, 20))["summary"]      # just after the last recorded row
+    assert s["capitalized"] == 2700 and s["has_statement"]
+    assert s["outstanding"] == 120690
+    # 120000 borrowed + 2700 added to it - 120690 still owed = 2010 of principal actually repaid
+    assert abs(s["principal_repaid"] - 2010) < 0.01
+    assert abs(s["progress"] - 2010 / 122700) < 1e-9
+    assert abs(s["interest_paid"] - (100 + 100 + 100 + 1000 + 990)) < 0.01
+    assert s["emis_paid"] == 5 and s["next"]["due"] == date(2025, 6, 10)
+    assert s["total_payable"] == 120000 + s["total_interest"]
+
+
+def test_every_emi_adds_up_to_principal_plus_all_interest_even_with_capitalised_interest():
+    data = _parse(_part_payment_loan())["data"]
+    rows = L.build_schedule(data["loan"]["principal"], data["loan"]["start_date"], data["emis"],
+                            data["rates"], [], TODAY_IMPORT, data["installments"])
+    loan = dict(data["loan"], id=0)
+    s = L.summarize(loan, rows, data["emis"], data["rates"], [], TODAY_IMPORT)
+    assert rows[-1]["closing"] == 0
+    assert abs(sum(r["emi"] for r in rows) - s["total_payable"]) < 0.01
+    assert abs(s["total_interest"] - (sum(r["interest"] for r in rows) + 2700)) < 0.01
+
+
+def test_prepayments_inside_the_statement_period_are_not_applied_twice():
+    doc = _part_payment_loan()
+    doc["prepayments"] = [{"date": "2025-03-20", "amount": 500, "note": "already in the balance"}]
+    data = _parse(doc)["data"]
+    rows = L.build_schedule(data["loan"]["principal"], data["loan"]["start_date"], data["emis"], data["rates"],
+                            [(p["date"], p["amount"]) for p in data["prepayments"]], TODAY_IMPORT,
+                            data["installments"])
+    assert rows[5]["opening"] == 120690 and rows[5]["prepaid"] == 0
+
+
+def test_creating_an_imported_loan_stores_every_part_and_loads_back():
+    db = sqlite3.connect(":memory:")
+    db.row_factory = sqlite3.Row
+    db.executescript(D.SCHEMA)
+    loan_id = I.create(db, _parse(_part_payment_loan())["data"])
+    loaded = L.load(db, L.get_loan(db, loan_id), TODAY_IMPORT)
+    assert len(db.execute("SELECT 1 FROM loan_installments").fetchall()) == 5
+    assert [e["value"] for e in loaded["emi_timeline"]] == [100, 2000]
+    assert loaded["summary"]["has_statement"] and loaded["summary"]["statement_until"] == date(2025, 5, 10)
+    assert sum(1 for r in loaded["rows"] if r["recorded"]) == 5
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

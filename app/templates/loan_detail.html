@@ -19,10 +19,17 @@
 </div>
 {% endif %}
 
+{% if s.has_statement %}
+<div class="notice info" style="margin-top:0">
+  Installments up to <strong>{{ s.statement_until.strftime('%d %b %Y') }}</strong> come from your lender's statement and
+  are kept exactly as recorded. EMI and rate changes, and prepayments, dated after that move the projection.
+</div>
+{% endif %}
+
 <div class="cards six">
   <div class="card"><div class="label">Outstanding principal</div>
     <div class="value">{{ s.outstanding | money(cur) }}</div>
-    <div class="sub">of {{ loan.principal | money(cur) }} borrowed</div></div>
+    <div class="sub">of {{ loan.principal | money(cur) }} borrowed{% if s.capitalized %} + {{ s.capitalized | money(cur) }} interest added{% endif %}</div></div>
   <div class="card"><div class="label">Principal repaid</div>
     <div class="value">{{ s.principal_repaid | money(cur) }}</div>
     <div class="sub">{{ '%.1f' % (s.progress * 100) }}%{% if s.prepaid_total %} · incl. {{ s.prepaid_total | money(cur) }} prepaid{% endif %}</div></div>
@@ -47,6 +54,9 @@
     <div><span class="muted small">Started</span><br><strong>{{ loan.start_date }}</strong></div>
     <div><span class="muted small">Total interest over the loan</span><br><strong>{{ s.total_interest | money(cur) }}</strong></div>
     <div><span class="muted small">Total payable</span><br><strong>{{ s.total_payable | money(cur) }}</strong></div>
+    {% if s.capitalized %}
+    <div title="Interest that was not paid when due and was added to the principal"><span class="muted small">Interest added to principal</span><br><strong>{{ s.capitalized | money(cur) }}</strong></div>
+    {% endif %}
     <div><span class="muted small">Projected end</span><br>
       <strong>{% if s.end_date %}{{ s.end_date.strftime('%b %Y') }}{% else %}—{% endif %}</strong>
       {% if s.months_ahead is not none %}
@@ -179,7 +189,9 @@
     <thead><tr>
       <th>#</th><th>Due</th><th>EMI</th><th>Principal</th><th>Interest</th>
       {% set has_prepay = rows | selectattr('prepaid') | list | length > 0 %}
+      {% set has_cap = rows | selectattr('capitalized') | list | length > 0 %}
       {% if has_prepay %}<th>Prepaid</th>{% endif %}
+      {% if has_cap %}<th>Added to principal</th>{% endif %}
       <th>Balance</th><th></th>
     </tr></thead>
     <tbody>
@@ -191,8 +203,9 @@
         <td>{{ r.principal | money(cur, 2) }}</td>
         <td>{{ r.interest | money(cur, 2) }}</td>
         {% if has_prepay %}<td>{{ r.prepaid | money(cur, 2) if r.prepaid else '' }}</td>{% endif %}
+        {% if has_cap %}<td>{{ r.capitalized | money(cur, 2) if r.capitalized else '' }}</td>{% endif %}
         <td>{{ r.closing | money(cur, 2) }}</td>
-        <td class="muted small" style="text-align:left">{% if r.paid %}paid{% elif s.next and s.next.n == r.n %}next{% endif %}</td>
+        <td class="muted small" style="text-align:left">{% if r.recorded %}statement{% elif r.paid %}paid{% elif s.next and s.next.n == r.n %}next{% endif %}</td>
       </tr>
     {% endfor %}
     </tbody>

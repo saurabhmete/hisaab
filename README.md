@@ -40,6 +40,12 @@ keep one's accounts.
   total interest over the loan, a balance-over-time chart, principal-vs-interest
   per year, support for part-payments (prepayments), and the full amortization
   schedule. EMIs of euro loans can be added to a month's plan with one click.
+  **Already paying a loan for years?** *Loans → Import running loan* gives you a
+  prompt to paste into Claude along with your lender's repayment schedule and
+  rate-change table. Claude returns a JSON file; upload it, review the summary,
+  and Hisaab keeps the lender's real past installments exactly as recorded
+  (including unpaid interest that was later added to the principal, such as after
+  a part-payment period) and projects the rest from the last one.
   The maths is covered by tests (`python -m tests.test_loans`).
 - **Dashboard** — salary vs expenses vs invested per month, and a net-worth trend.
 - **Excel import** — upload the original "Salary Plan" workbook on the *Import*

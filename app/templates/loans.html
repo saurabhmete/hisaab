@@ -4,7 +4,10 @@
 
 <div class="month-nav" style="justify-content: space-between; width: 100%">
   <h1>Loans</h1>
-  <a class="btn" href="/loans/new">+ Add loan</a>
+  <div style="display:flex; gap:0.5rem; flex-wrap:wrap">
+    <a class="btn secondary" href="/loans/import">Import running loan</a>
+    <a class="btn" href="/loans/new">+ Add loan</a>
+  </div>
 </div>
 
 {% if items %}
@@ -58,7 +61,10 @@
     EMI or rate changes, record the change with its effective date and everything is
     recalculated. Extra part-payments are supported too.
   </p>
-  <a class="btn" href="/loans/new">+ Add your first loan</a>
+  <div style="display:flex; gap:0.5rem; flex-wrap:wrap">
+    <a class="btn" href="/loans/new">+ Add a new loan</a>
+    <a class="btn secondary" href="/loans/import">Import a loan I've been paying for a while</a>
+  </div>
 </div>
 {% endif %}
 
