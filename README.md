@@ -1,142 +1,139 @@
 # Hisaab — हिसाब
 
-Self-hosted personal finance tracker: monthly salary, expenses, and dual-currency
-(INR / EUR) investment tracking. FastAPI + SQLite, one container, made to run on a
-Raspberry Pi behind [Tailscale](https://tailscale.com).
+**A private, self-hosted money tracker.** Plan each month, see what's left, follow your
+investments in rupees and euros, and keep track of loans down to the last EMI. It runs as one small
+container on a Raspberry Pi (or anywhere else), behind [Tailscale](https://tailscale.com),
+and your numbers never leave your own hardware.
 
-*Hisaab* (हिसाब) — Hindi for "accounts / the reckoning", as in *hisaab rakhna*, to
-keep one's accounts.
+*Hisaab* (हिसाब) is Hindi for "accounts" or "the reckoning", as in *hisaab rakhna*: to keep one's accounts.
 
-## Screenshots
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/overview-dark.png">
+  <img alt="The overview: how much is left this month, where it went, and a year at a glance" src="docs/screenshots/overview-light.png">
+</picture>
 
-*All numbers below are generated demo data.*
+*All numbers in the screenshots are made-up demo data.*
 
-| Dashboard | Month planner |
-|---|---|
-| ![Dashboard](docs/dashboard.png) | ![Month planner](docs/month-planner.png) |
+## What it does
 
-| Investments | Year grid |
-|---|---|
-| ![Investments](docs/investments.png) | ![Year grid](docs/year-grid.png) |
+- **Month planner.** Start each month by listing expected expenses (your regular ones are
+  pre-filled from last month). A live panel shows what's *left after expenses*, how much you *can
+  invest*, and the *remainder in your account* once you decide.
+- **Overview.** One answer first: *how much is left this month*, with a bar showing where the salary
+  went, category bars, a year chart, and your net worth and loans at a glance.
+- **History.** Every year as a card, and a spreadsheet-style grid (categories × months) with year totals.
+- **Investments.** Monthly snapshots of what you hold in India (₹) and Germany (€); net worth, profit and
+  profit % are worked out, valued at today's EUR→INR rate. A privacy eye blurs the page for demos.
+- **Loans and EMIs.** Any loan, in eight currencies, with separate dated histories for the EMI and the
+  interest rate (including temporary windows for floating rates), prepayments, the full repayment
+  schedule, charts, and a **pay-off calculator** that tells you what closes the loan on a chosen day.
+- **Bring your data in.** From the old Excel sheet, or from *anything else* (bank statements, other apps,
+  a lender's repayment schedule) with a prompt you give Claude, which writes a file Hisaab validates and
+  lets you review before anything is saved.
+- **Several people, separate money.** Add your partner as a user. Each person has their own completely
+  private data; even admins can't see anyone else's.
+- **Light and dark**, on desktop and phone.
 
-| Loan detail |
-|---|
-| ![Loan detail](docs/loan-detail.png) |
+<table>
+<tr>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/planner-dark.png"><img alt="Month planner" src="docs/screenshots/planner-light.png"></picture><br><sub><b>Month planner</b>: plan, then decide what to invest</sub></td>
+<td width="50%"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/investments-dark.png"><img alt="Investments" src="docs/screenshots/investments-light.png"></picture><br><sub><b>Investments</b>: net worth and profit over time</sub></td>
+</tr>
+<tr>
+<td><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/loan-dark.png"><img alt="A loan" src="docs/screenshots/loan-light.png"></picture><br><sub><b>A loan</b>: still to repay, interest, projection</sub></td>
+<td><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/payoff-dark.png"><img alt="Pay off early" src="docs/screenshots/payoff-light.png"></picture><br><sub><b>Pay off early</b>: what closes the loan on a given day</sub></td>
+</tr>
+<tr>
+<td><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/history-dark.png"><img alt="Year grid" src="docs/screenshots/history-light.png"></picture><br><sub><b>History</b>: the whole year in one grid</sub></td>
+<td><picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/import-dark.png"><img alt="Import with Claude" src="docs/screenshots/import-light.png"></picture><br><sub><b>Import</b>: turn any records into a file Hisaab can read</sub></td>
+</tr>
+</table>
 
-## Features
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/mobile-dark.png">
+  <img alt="Overview, planner and a loan on a phone" src="docs/screenshots/mobile-light.png">
+</picture>
 
-- **Monthly view** — salary, per-category expenses, what's left after expenses and
-  after investing. Data is entered directly on the site.
-- **Year grid** — the classic spreadsheet layout: categories × months.
-- **Investments** — India (₹) and Germany (€) values and profits per month; net
-  worth in INR, profit percentages, and the EUR→INR conversion are computed for you.
-- **Loans & EMIs** — track any loan (EUR, INR, USD, GBP, CHF, AED, CAD or AUD): amount, start date, tenure, and
-  separate dated histories for the **EMI** and the **interest rate**, so a change
-  from a given date is recorded instead of overwriting the past. Floating rate or
-  a temporary EMI? Give the change a *from* and an *until* date and the previous
-  value resumes automatically. For each loan you
-  get the outstanding principal, principal repaid, interest paid so far, EMIs
-  left, projected end date (and how far ahead/behind the original tenure you are),
-  total interest over the loan, a balance-over-time chart, principal-vs-interest
-  per year, support for part-payments (prepayments), and the full amortization
-  schedule. EMIs of euro loans can be added to a month's plan with one click.
-  **Paying it off early?** Pick a date on the loan's page and see exactly what
-  clears it that day: outstanding principal, interest accrued since the last EMI,
-  and an optional foreclosure charge, plus the interest you'd avoid. Part-months
-  accrue daily on a 365-day year, and each loan records whether your lender applies
-  a rate change from the EMI date it takes effect on or only from the next EMI, so
-  the figure can follow your bank's own habit.
-  **Already paying a loan for years?** *Loans → Import running loan* gives you a
-  prompt to paste into Claude along with your lender's repayment schedule and
-  rate-change table. Claude returns a JSON file; upload it, review the summary,
-  (Claude is told to ask you about anything missing or unclear, since every lender's
-  documents look different) and Hisaab keeps the lender's real past installments exactly as recorded
-  (including unpaid interest that was later added to the principal, such as after
-  a part-payment period) and projects the rest from the last one.
-  The maths is covered by tests (`python -m tests.test_loans`).
-- **Dashboard** — salary vs expenses vs invested per month, and a net-worth trend.
-- **Excel import** — upload the original "Salary Plan" workbook on the *Import*
-  page (or `python import_excel.py file.xlsx`) to seed the database. After that
-  the site is the source of truth; import stays available as an option.
-- **Import from any other format** — records in bank statements, a differently
-  laid-out spreadsheet or another app's export? The *Import* page gives you a
-  prompt to paste into Claude along with those files. Claude asks about anything
-  unclear (what counts as salary, which payments are investments, how to group
-  spending), then produces a JSON file with your months, expenses and investment
-  snapshots. Hisaab reuses your existing category names, shows a review of what
-  would be added or replaced, and only saves when you confirm. Existing months are
-  updated, never emptied.
-- **Users & login** — on first launch the app asks you to create an **admin**
-  account. The setup page is protected by a one-time token printed in the server
-  log (`docker compose logs hisaab`) — open the `/setup?token=…` link it shows,
-  so a publicly exposed fresh install can't be claimed by a stranger. (Set
-  `HISAAB_SETUP_TOKEN` to choose the token yourself; a random one is generated
-  per start otherwise.) Admins can add and remove users on the *Users* page (e.g. add your
-  partner as a regular member); members can't manage users, and the last admin
-  can never be deleted. **Every person has their own private data**: months,
-  expenses, investments and loans are stored in a separate database file per
-  account, chosen from who is logged in, so one person (admins included) can
-  never see another's money. A new account starts empty; removing an account
-  permanently deletes its data. The first account keeps the original data.
-  Prefer no login wall at all (Tailscale already limits who can reach the Pi)?
-  Set `HISAAB_AUTH=off` in the environment.
-- **No cloud** — SQLite files in `data/` on your own hardware: `hisaab.db`
-  (the accounts, plus the first account's data) and one `data/users/<id>.db`
-  per additional account. Chart.js is vendored, so it works fully offline.
+## Quick start
 
-## Run locally
+**Try it on your computer** (Python 3.12):
 
 ```sh
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload
-# open http://127.0.0.1:8000
 ```
 
-## Deploy on the Raspberry Pi (Docker)
+Open <http://127.0.0.1:8000>. The first run asks you to create the admin account through a private
+link that is printed in the terminal (`/setup?token=…`).
+
+**Run it for real** on a Raspberry Pi with Docker, reachable from your phone anywhere through
+Tailscale: follow the [deployment guide](docs/DEPLOYMENT.md). In short:
 
 ```sh
-git clone <your-repo> hisaab && cd hisaab
+git clone https://github.com/saurabhmete/hisaab.git && cd hisaab
 docker compose up -d --build
 ```
 
-The app listens on port 8000 and stores its database in `./data/` on the host.
-On a tailnet, open `http://<pi-tailscale-name>:8000` from any of your devices.
+## Documentation
 
-### HTTPS URL with Tailscale Serve or Funnel
+| Guide | What's in it |
+|---|---|
+| [User guide](docs/USER_GUIDE.md) | How to use every part of the app, step by step |
+| [Deployment](docs/DEPLOYMENT.md) | Raspberry Pi, Docker, Tailscale, updating, backups and restoring, troubleshooting |
+| [Import formats](docs/IMPORT_FORMATS.md) | The Excel layout and the two JSON files Claude produces, field by field |
+| [Architecture](docs/ARCHITECTURE.md) | How it works inside: data layout, privacy model, the loan maths, tests |
+| [Changelog](CHANGELOG.md) | What changed, and when |
 
-Tailnet-only (recommended — reachable from your own devices anywhere, invisible
-to the internet). If port 443 is already taken by another app on the Pi, use one
-of the alternative ports (8443 or 10000):
+## Privacy and security at a glance
+
+- **Your data stays on your hardware.** SQLite files in `data/`. No cloud service, no analytics. The
+  only outside request the app makes is for the day's EUR→INR rate (and it works without it).
+- **Everyone's data is separate.** Each person has their own database file, chosen from who is logged in.
+  A new account starts empty. Removing an account deletes its data.
+- **Sign-in protection.** Passwords are stored as salted PBKDF2 hashes; sessions are `HttpOnly`
+  cookies (`Secure` over HTTPS); five wrong passwords from one address lock it out for 15 minutes; the
+  first-run setup page needs a private token so a stranger can't claim the admin account.
+- **Not encrypted at rest.** Anyone with access to the Pi itself can read the database files. Keep the
+  Pi secure and back it up. See [Architecture → Security](docs/ARCHITECTURE.md#security-model).
+
+## Tech
+
+FastAPI, SQLite (standard library `sqlite3`, no ORM), server-rendered Jinja templates, a little vanilla
+JavaScript, and Chart.js (bundled, so it works offline). No build step, no Node. Five Python packages in
+[`requirements.txt`](requirements.txt).
+
+## Tests
 
 ```sh
-tailscale serve --bg --https=8443 http://127.0.0.1:8000
-# → https://<pi-name>.<tailnet>.ts.net:8443
+python -m tests.test_loans        # loan maths, payoff, rate windows, statements (51 checks)
+python -m tests.test_data_import  # the import file validator (18)
+python -m tests.test_pages        # every page renders, empty and with data (4)
+python -m tests.test_isolation    # one person never sees another's money (6)
+python -m tests.check_browser     # loads every page in headless Chrome, fails on any console error
 ```
 
-Public internet via Funnel (no VPN client needed on the visiting device):
+The last one needs Google Chrome or Chromium and is skipped politely without it.
 
-```sh
-tailscale funnel --bg --https=8443 http://127.0.0.1:8000
+## Project layout
+
+```
+app/
+  main.py            routes, sign-in middleware
+  database.py        accounts + per-person databases, schema, migrations
+  loans.py           loan engine: schedule, summary, payoff, storage
+  loan_import.py     loan import: the prompt, the validator, storing it
+  data_import.py     months/investments import (same idea)
+  importer.py        the Excel ("Salary Plan") importer
+  rates.py           live EUR→INR rate (cached, optional)
+  icons.py           inline SVG icons and the logo
+  templates/         Jinja pages
+  static/            style.css, app.js, chart.umd.js
+scripts/backup.sh    nightly backup of every database
+tests/               the suites above
+docs/                guides and screenshots
+import_excel.py      command-line Excel import
+Dockerfile, docker-compose.yml
 ```
 
-With Funnel the login page is exposed to the whole internet, so the app ships
-with brute-force protection: 5 failed logins from an IP within 15 minutes lock
-that IP out for the rest of the window, session cookies are `Secure` +
-`HttpOnly`, and passwords are stored as salted PBKDF2 hashes. Use strong
-passwords, and never set `HISAAB_AUTH=off` on a funneled deployment.
-
-## Backups
-
-The state is `data/hisaab.db` plus one file per extra account in `data/users/`.
-A nightly cron on the Pi backs up all of them:
-
-```sh
-# crontab -e
-0 3 * * * for f in $HOME/hisaab/data/hisaab.db $HOME/hisaab/data/users/*.db; do [ -f "$f" ] && sqlite3 "$f" ".backup $HOME/backups/$(basename "$f" .db)-$(date +\%a).db"; done
-```
-
-## Privacy
-
-`.gitignore` excludes `data/` and all `.xlsx`/`.db` files — the code can live on
-GitHub, the numbers never leave your Pi.
+*A personal project. Use it, change it, make it yours.*
